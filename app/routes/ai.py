@@ -44,6 +44,7 @@ async def recommend(
     )
     return result
 
+# TODO [BE-027]: Add rate limiting (5/min/IP)
 @router.post(
     "/search",
     response_model=SearchResponse,
