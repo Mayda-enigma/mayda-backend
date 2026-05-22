@@ -11,6 +11,22 @@ FastAPI + Prisma + PostgreSQL backend for the Mayda restaurant management platfo
 - **Payments:** Guidini Pay
 - **Infrastructure:** Docker Compose, Nginx
 
+## Required env vars
+
+These must be set before the app will start. Missing any of them causes an immediate startup error.
+
+| Variable | How to generate |
+|---|---|
+| `SECRET_KEY` | `openssl rand -hex 32` |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SERVICE_TOKEN` | `openssl rand -hex 32` (shared secret for AI service-to-service calls) |
+
+```bash
+# Quick generation
+export SECRET_KEY=$(openssl rand -hex 32)
+export SERVICE_TOKEN=$(openssl rand -hex 32)
+```
+
 ## Quick Start (Local)
 
 ```bash
