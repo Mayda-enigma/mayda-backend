@@ -4,7 +4,6 @@ All endpoints require a valid JWT. PII is stripped; only the internal user ID
 is forwarded to downstream services via the shared SERVICE_TOKEN header.
 """
 
-import uuid
 from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException
 
 from app.core.config import settings
@@ -36,11 +35,11 @@ router = APIRouter(prefix="/ai", tags=["AI"])
     ),
 )
 async def recommend(
+    request: Request,
     body: RecommendRequest,
     current_user=Depends(get_current_user),
 ) -> RecommendResponse:
     """Proxy POST /recommendations to the recommendation service."""
-    request_id = str(uuid.uuid4())
     result = await proxy_to_service(
         base_url=settings.RECOMMENDATION_SERVICE_URL,
         path="/recommendations",
@@ -50,7 +49,7 @@ async def recommend(
             "cart_item_ids": body.cartItemIds,
             "time_of_day": body.timeOfDay,
         },
-        request_id=request_id,
+        request=request,
     )
     return result
 
@@ -62,16 +61,16 @@ async def recommend(
     description="Public endpoint (no auth required) to proxy search queries.",
 )
 async def search(
+    request: Request,
     body: SearchRequest,
 ) -> SearchResponse:
     """Proxy POST /search to the search service."""
-    request_id = str(uuid.uuid4())
     result = await proxy_to_service(
         base_url=settings.SEARCH_SERVICE_URL,
         path="/search",
         method="POST",
         json=body.model_dump(exclude_none=True),
-        request_id=request_id,
+        request=request,
     )
     return result
 
@@ -82,17 +81,17 @@ async def search(
     description="Staff-only endpoint to proxy AI-forecasted ingredient needs.",
 )
 async def forecast(
+    request: Request,
     body: ForecastRequest,
     current_user=Depends(get_current_staff_user),
 ) -> ForecastResponse:
     """Proxy POST /forecast to the inventory AI service."""
-    request_id = str(uuid.uuid4())
     result = await proxy_to_service(
         base_url=settings.INVENTORY_SERVICE_URL,
         path="/forecast",
         method="POST",
         json=body.model_dump(exclude_none=True),
-        request_id=request_id,
+        request=request,
     )
     return result
 
@@ -113,7 +112,6 @@ async def transcribe(
     if content_length and int(content_length) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Payload Too Large")
 
-    request_id = str(uuid.uuid4())
     audio_content = await audio.read()
     
     files = {
@@ -124,7 +122,7 @@ async def transcribe(
         base_url=settings.VOICE_SERVICE_URL,
         path="/transcribe",
         files=files,
-        request_id=request_id,
+        request=request,
     )
     return result
 
@@ -135,18 +133,18 @@ async def transcribe(
     description="Admin-only endpoint to view AI-flagged anomalies.",
 )
 async def get_anomalies(
+    request: Request,
     range: str | None = None,
     current_user=Depends(get_current_admin_user),
 ) -> list[Anomaly]:
     """Proxy GET /anomalies to the anomaly-detection service."""
-    request_id = str(uuid.uuid4())
     params = {"range": range} if range else None
     result = await proxy_to_service(
         base_url=settings.ANOMALY_SERVICE_URL,
         path="/anomalies",
         method="GET",
         params=params,
-        request_id=request_id,
+        request=request,
     )
     return result
 
@@ -157,15 +155,15 @@ async def get_anomalies(
     description="Admin-only endpoint to acknowledge an anomaly.",
 )
 async def ack_anomaly(
+    request: Request,
     anomaly_id: str,
     current_user=Depends(get_current_admin_user),
 ) -> AnomalyAckResponse:
     """Proxy POST /anomalies/{id}/ack to the anomaly-detection service."""
-    request_id = str(uuid.uuid4())
     result = await proxy_to_service(
         base_url=settings.ANOMALY_SERVICE_URL,
         path=f"/anomalies/{anomaly_id}/ack",
         method="POST",
-        request_id=request_id,
+        request=request,
     )
     return result
