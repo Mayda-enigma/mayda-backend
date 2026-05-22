@@ -11,6 +11,8 @@ from app.routes import auth, protected, restaurants, tables, menus, orders, rese
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
+from app.utils.logging import logger
 
 
 @asynccontextmanager
@@ -18,17 +20,17 @@ async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     try:
         await connect_db()
-        print("Database connected successfully")
+        logger.info("Database connected successfully")
         await ensure_admin_user_exists()
     except Exception as e:
-        print(f"Failed to connect to database: {e}")
+        logger.error("Failed to connect to database: {}", e)
         raise
     yield
     try:
         await disconnect_db()
-        print("Database disconnected successfully")
+        logger.info("Database disconnected successfully")
     except Exception as e:
-        print(f"Error disconnecting from database: {e}")
+        logger.error("Error disconnecting from database: {}", e)
 
 
 # Create FastAPI app
@@ -43,6 +45,9 @@ app = FastAPI(
 
 # Request ID middleware (added before CORS)
 app.add_middleware(RequestIdMiddleware)
+
+# Request logging middleware (runs after request_id is set)
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -78,12 +83,12 @@ async def ensure_admin_user_exists():
         )
         
         if admin_user:
-            print(f"Admin user already exists: {admin_user.email}")
+            logger.info("Admin user already exists: {}", admin_user.email)
             return
-        
+
         # Create default admin user
         hashed_password = get_password_hash("admin123456")
-        
+
         admin_user = await db.user.create(
             data={
                 "email": "admin@caravane.com",
@@ -95,14 +100,11 @@ async def ensure_admin_user_exists():
                 "isActive": True
             }
         )
-        
-        print("Default admin user created successfully!")
-        print(f"Email: {admin_user.email}")
-        print("Password: admin123456")
-        print("Please change the default credentials after first login!")
-        
+
+        logger.info("Default admin user created. Email: {}. Please change credentials!", admin_user.email)
+
     except Exception as e:
-        print(f"Error creating admin user: {e}")
+        logger.error("Error creating admin user: {}", e)
 
 
 # Include routers
