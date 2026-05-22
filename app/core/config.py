@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = []
     BACKEND_CORS_ORIGIN_REGEX: str = (
-        r"https?://(localhost(:\d+)?|.*\.mayda\.app|.*\.vercel\.app)"
+        r"https?://(localhost(:\d+)?|(.*\.)?mayda\.app|.*\.vercel\.app)"
     )
 
     # Environment
