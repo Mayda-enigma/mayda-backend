@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     SEARCH_SERVICE_URL: str = "http://search-llm:8102"
     INVENTORY_SERVICE_URL: str = "http://inventory:8103"
     VOICE_SERVICE_URL: str = "http://voice-chef:8104"
+    ANOMALY_SERVICE_URL: str = "http://anomaly:8105"
     SERVICE_TOKEN: str = ""
 
     @model_validator(mode="after")
