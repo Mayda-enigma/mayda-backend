@@ -162,7 +162,7 @@ async def inject_test_orders():
         
         print("\n🧪 How to test the Payment API:")
         print("1. Start the FastAPI server: uvicorn main:app --reload")
-        print("2. Go to http://localhost:8000/docs")
+        print("2. Go to http://localhost:8001/docs")
         print("3. Login with the test user credentials or create a new user")
         print("4. Use the order IDs above to test payment endpoints:")
         print("   - POST /api/payments/initiate (with orderId)")
