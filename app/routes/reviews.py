@@ -5,7 +5,7 @@ from app.models.review import (
     ReviewCreate, ReviewUpdate, ReviewResponse, ReviewListResponse,
     ReviewStats, RestaurantReviewsResponse, DishReviewsResponse
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
@@ -22,10 +22,10 @@ async def get_restaurant_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
-    verified_only: bool = Query(False)
+    verified_only: bool = Query(False),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get reviews for a restaurant (Public endpoint)."""
-    db = get_db()
     
     # Validate restaurant exists
     restaurant = await db.restaurant.find_unique(
@@ -122,7 +122,6 @@ async def get_dish_reviews(
     verified_only: bool = Query(False)
 ):
     """Get reviews for a specific dish (Public endpoint)."""
-    db = get_db()
     
     # Validate dish exists
     dish = await db.dish.find_unique(
@@ -225,10 +224,10 @@ async def get_dish_reviews(
 @router.post("/", response_model=ReviewResponse)
 async def create_review(
     review_data: ReviewCreate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create review for authenticated user."""
-    db = get_db()
     
     # Validate restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": review_data.restaurantId})
@@ -385,7 +384,6 @@ async def get_my_reviews(
     current_user = Depends(get_current_user)
 ):
     """Get current user's reviews."""
-    db = get_db()
     
     reviews = await db.review.find_many(
         where={"userId": current_user.id},
@@ -421,10 +419,10 @@ async def get_my_reviews(
 @router.get("/{review_id}", response_model=ReviewResponse)
 async def get_review(
     review_id: int,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get review by ID. Users can only see their own reviews, staff can see restaurant reviews."""
-    db = get_db()
     
     review = await db.review.find_unique(
         where={"id": review_id},
@@ -484,7 +482,6 @@ async def update_review(
     current_user = Depends(get_current_user)
 ):
     """Update review (Customer only - their own reviews)."""
-    db = get_db()
     
     # Check if review exists
     review = await db.review.find_unique(where={"id": review_id})
@@ -567,10 +564,10 @@ async def update_review(
 @router.delete("/{review_id}")
 async def delete_review(
     review_id: int,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete review (Customer or Staff)."""
-    db = get_db()
     
     # Check if review exists
     review = await db.review.find_unique(where={"id": review_id})
@@ -622,7 +619,6 @@ async def get_restaurant_reviews_management(
     current_user = Depends(get_current_staff_user)
 ):
     """Get restaurant reviews for management (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:

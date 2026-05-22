@@ -3,7 +3,7 @@ from typing import List
 from app.models.table import (
     TableCreate, TableUpdate, TableResponse, TableListResponse
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_manager_or_admin, get_current_staff_user,
     get_current_user_optional
@@ -17,10 +17,10 @@ router = APIRouter(prefix="/tables", tags=["Tables"])
 async def get_restaurant_tables(
     restaurant_id: int,
     active_only: bool = Query(True),
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get tables for a restaurant (public endpoint for customers to see available tables)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
@@ -48,7 +48,6 @@ async def get_table(
     current_user = Depends(get_current_user_optional)
 ):
     """Get table by ID (public endpoint)."""
-    db = get_db()
     
     table = await db.table.find_unique(where={"id": table_id})
     
@@ -64,10 +63,10 @@ async def get_table(
 @router.post("/", response_model=TableResponse)
 async def create_table(
     table_data: TableCreate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create a new table (Manager/Admin only). Managers can only create tables for their restaurant."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": table_data.restaurantId})
@@ -126,7 +125,6 @@ async def update_table(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Update table (Manager/Admin only). Managers can only update tables in their restaurant."""
-    db = get_db()
     
     # Check if table exists
     table = await db.table.find_unique(where={"id": table_id})
@@ -189,10 +187,10 @@ async def update_table(
 @router.delete("/{table_id}")
 async def delete_table(
     table_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete table (Manager/Admin only). Managers can only delete tables from their restaurant."""
-    db = get_db()
     
     # Check if table exists
     table = await db.table.find_unique(where={"id": table_id})
@@ -240,7 +238,6 @@ async def toggle_table_status(
     current_user = Depends(get_current_staff_user)
 ):
     """Toggle table active status (Staff only - for their restaurant)."""
-    db = get_db()
     
     # Check if table exists
     table = await db.table.find_unique(where={"id": table_id})
@@ -278,10 +275,10 @@ async def toggle_table_status(
 @router.get("/{table_id}/current-orders")
 async def get_table_current_orders(
     table_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current orders for a table (Staff only)."""
-    db = get_db()
     
     # Check if table exists
     table = await db.table.find_unique(where={"id": table_id})
@@ -333,7 +330,6 @@ async def get_tables_availability(
     current_user = Depends(get_current_user_optional)
 ):
     """Get table availability status for a restaurant (public endpoint for customers)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})

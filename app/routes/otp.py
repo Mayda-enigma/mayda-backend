@@ -5,7 +5,7 @@ from app.models.otp import (
     PaymentOtpRequest, PaymentOtpVerifyRequest, StaffLoginRequest, StaffOtpVerifyRequest
 )
 from app.models.user import UserRole
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.utils.sms_service import sms_service
 from app.auth.jwt import create_access_token, create_refresh_token
 from app.middleware.roles import get_current_user
@@ -26,7 +26,6 @@ async def send_staff_otp(request: StaffLoginRequest):
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Find staff user by phone
@@ -87,7 +86,6 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest):
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Find staff user by phone
@@ -167,7 +165,6 @@ async def send_payment_otp(
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Get order and validate ownership
@@ -234,7 +231,6 @@ async def verify_payment_otp(
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Get order and validate

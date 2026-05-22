@@ -11,7 +11,7 @@ from app.auth.jwt import (
 )
 from app.utils.sms_service_debug import SMSService
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_user, get_current_admin_user
 )
@@ -21,9 +21,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(user_data: UserRegister):
+async def register(user_data: UserRegister, db: "Prisma" = Depends(get_db_session)):
     """Register a new user."""
-    db = get_db()
     
     # Check if user already exists
     existing_user = None
@@ -72,7 +71,6 @@ async def register(user_data: UserRegister):
 @router.post("/staff-login", response_model=TempTokenResponse)
 async def staff_login(user_data: StaffLogin):
     """Staff login with 2FA - returns temporary token."""
-    db = get_db()
     
     # Find user by phone
     user = await db.user.find_unique(where={"phone": user_data.phone})
@@ -117,9 +115,8 @@ async def staff_login(user_data: StaffLogin):
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
-async def verify_otp_and_login(otp_data: OtpVerificationRequest):
+async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: "Prisma" = Depends(get_db_session)):
     """Verify OTP and complete staff login."""
-    db = get_db()
     
     # Verify temporary token
     payload = verify_temp_token(otp_data.tempToken, "2fa")
@@ -174,7 +171,6 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest):
 @router.post("/login", response_model=TokenResponse)
 async def login(user_data: UserLogin):
     """Authenticate regular user and return access token (customers only)."""
-    db = get_db()
     
     # Find user by email or phone
     user = None
@@ -225,9 +221,8 @@ async def login(user_data: UserLogin):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(token_data: RefreshTokenRequest):
+async def refresh_token(token_data: RefreshTokenRequest, db: "Prisma" = Depends(get_db_session)):
     """Refresh access token using refresh token."""
-    db = get_db()
     
     # Verify refresh token
     payload = verify_token(token_data.refresh_token, token_type="refresh")
@@ -297,7 +292,6 @@ async def refresh_token(token_data: RefreshTokenRequest):
 @router.post("/logout")
 async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_current_user)):
     """Logout user by revoking refresh token."""
-    db = get_db()
     
     # Revoke the refresh token
     await db.refreshtoken.update_many(
@@ -315,7 +309,6 @@ async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_curre
 @router.post("/logout-all")
 async def logout_all(current_user=Depends(get_current_user)):
     """Logout user from all devices by revoking all refresh tokens."""
-    db = get_db()
     
     # Revoke all refresh tokens for the user
     await db.refreshtoken.update_many(
@@ -330,7 +323,7 @@ async def logout_all(current_user=Depends(get_current_user)):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user=Depends(get_current_user)):
+async def get_current_user_info(current_user=Depends(get_current_user), db: "Prisma" = Depends(get_db_session)):
     """Get current user information."""
     return UserResponse.model_validate(current_user)
 
@@ -341,7 +334,6 @@ async def update_current_user(
     current_user=Depends(get_current_user)
 ):
     """Update current user information."""
-    db = get_db()
     
     update_data = {}
     
@@ -408,10 +400,10 @@ async def update_current_user(
 @router.put("/change-password")
 async def change_password(
     password_data: PasswordChange,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Change user password."""
-    db = get_db()
     
     # Verify current password
     if not verify_password(password_data.current_password, current_user.password):
@@ -445,7 +437,6 @@ async def change_password(
 @router.get("/users", response_model=list[UserResponse])
 async def get_all_users(current_user=Depends(get_current_admin_user)):
     """Get all users (Admin only)."""
-    db = get_db()
     
     users = await db.user.find_many(
         order={"createdAt": "desc"}
@@ -461,7 +452,6 @@ async def update_user(
     current_user=Depends(get_current_admin_user)
 ):
     """Update any user (Admin only)."""
-    db = get_db()
     
     # Check if user exists
     user = await db.user.find_unique(where={"id": user_id})

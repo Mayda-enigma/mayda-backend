@@ -6,7 +6,7 @@ from app.models.ingredient import (
     DishIngredientsResponse, IngredientStatsResponse,
     IngredientCategoryResponse
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user
 )
@@ -20,10 +20,10 @@ router = APIRouter(prefix="/ingredients", tags=["Ingredients Management"])
 @router.post("/", response_model=IngredientResponse, status_code=status.HTTP_201_CREATED)
 async def create_ingredient(
     ingredient_data: IngredientCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create new ingredient (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -89,7 +89,6 @@ async def get_ingredients(
     current_user = Depends(get_current_staff_user)
 ):
     """Get ingredients with filters (Staff only)."""
-    db = get_db()
     
     # Build where clause
     where_clause = {"isActive": is_active}
@@ -154,10 +153,10 @@ async def get_ingredients(
 @router.get("/{ingredient_id}", response_model=IngredientResponse)
 async def get_ingredient(
     ingredient_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get single ingredient (Staff only)."""
-    db = get_db()
     
     # Get ingredient
     ingredient = await db.ingredient.find_unique(
@@ -194,7 +193,6 @@ async def update_ingredient(
     current_user = Depends(get_current_staff_user)
 ):
     """Update ingredient (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -275,10 +273,10 @@ async def update_ingredient(
 @router.delete("/{ingredient_id}")
 async def delete_ingredient(
     ingredient_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete (deactivate) ingredient (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -339,7 +337,6 @@ async def add_ingredient_to_dish(
     current_user = Depends(get_current_staff_user)
 ):
     """Add ingredient to dish (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -448,10 +445,10 @@ async def add_ingredient_to_dish(
 @router.get("/dish/{dish_id}/ingredients", response_model=DishIngredientsResponse)
 async def get_dish_ingredients(
     dish_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get all ingredients for a dish with dietary info (Staff only)."""
-    db = get_db()
     
     # Get dish with ingredients
     dish = await db.dish.find_unique(
@@ -543,7 +540,6 @@ async def update_dish_ingredient(
     current_user = Depends(get_current_staff_user)
 ):
     """Update dish ingredient relation (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -630,10 +626,10 @@ async def update_dish_ingredient(
 @router.delete("/dish-ingredients/{dish_ingredient_id}")
 async def remove_ingredient_from_dish(
     dish_ingredient_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Remove ingredient from dish (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -701,7 +697,6 @@ async def get_ingredient_stats(
     current_user = Depends(get_current_staff_user)
 ):
     """Get ingredient statistics (Staff only)."""
-    db = get_db()
     
     try:
         # Get all ingredients
@@ -765,7 +760,6 @@ async def get_ingredient_categories(
     current_user = Depends(get_current_staff_user)
 ):
     """Get ingredient breakdown by category (Staff only)."""
-    db = get_db()
     
     try:
         # Get all active ingredients

@@ -6,7 +6,7 @@ from app.models.loyalty import (
     PointsEarnedRequest, PointsEarnedResponse, LoyaltyStatsResponse,
     RestaurantLoyaltyStatsResponse, LoyaltyProgramInfo
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/loyalty", tags=["Loyalty Cards & Points"])
 # ==================== LOYALTY PROGRAM INFO ====================
 
 @router.get("/program-info", response_model=LoyaltyProgramInfo)
-async def get_loyalty_program_info():
+async def get_loyalty_program_info(db: "Prisma" = Depends(get_db_session)):
     """Get loyalty program information (Public endpoint)."""
     
     return LoyaltyProgramInfo(
@@ -33,7 +33,6 @@ async def get_loyalty_program_info():
 @router.get("/my-card", response_model=LoyaltyCardResponse)
 async def get_my_loyalty_card(current_user = Depends(get_current_user)):
     """Get current user's loyalty card."""
-    db = get_db()
     
     loyalty_card = await db.loyaltycard.find_unique(
         where={"userId": current_user.id},
@@ -75,10 +74,10 @@ async def get_my_loyalty_transactions(
     limit: int = Query(50, ge=1, le=100),
     restaurant_id: Optional[int] = Query(None),
     transaction_type: Optional[str] = Query(None),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current user's loyalty transactions."""
-    db = get_db()
     
     # Get user's loyalty card
     loyalty_card = await db.loyaltycard.find_unique(
@@ -145,7 +144,6 @@ async def get_my_loyalty_transactions(
 @router.get("/my-stats", response_model=LoyaltyStatsResponse)
 async def get_my_loyalty_stats(current_user = Depends(get_current_user)):
     """Get current user's loyalty statistics."""
-    db = get_db()
     
     # Get user's loyalty card
     loyalty_card = await db.loyaltycard.find_unique(
@@ -222,10 +220,10 @@ async def get_my_loyalty_stats(current_user = Depends(get_current_user)):
 @router.post("/redeem-points", response_model=PointsRedemptionResponse)
 async def redeem_points(
     redemption_request: PointsRedemptionRequest,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Redeem loyalty points for discount."""
-    db = get_db()
     
     # Get user's loyalty card
     loyalty_card = await db.loyaltycard.find_unique(
@@ -307,7 +305,6 @@ async def award_points_for_order(
     current_user = Depends(get_current_staff_user)
 ):
     """Award points to customer for completed order (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER", "WAITER"]:
@@ -416,10 +413,10 @@ async def award_points_for_order(
 @router.get("/restaurant/{restaurant_id}/stats", response_model=RestaurantLoyaltyStatsResponse)
 async def get_restaurant_loyalty_stats(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get loyalty statistics for a restaurant (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -518,7 +515,6 @@ async def create_manual_loyalty_transaction(
     current_user = Depends(get_current_staff_user)
 ):
     """Create manual loyalty transaction (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:

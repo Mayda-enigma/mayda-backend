@@ -4,7 +4,7 @@ from app.models.restaurant import (
     RestaurantCreate, RestaurantUpdate, RestaurantResponse, 
     RestaurantListResponse
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_admin_user, get_current_manager_or_admin,
     get_current_user_optional
@@ -19,10 +19,10 @@ async def get_restaurants(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = Query(True),
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get list of restaurants (public endpoint)."""
-    db = get_db()
     
     where_clause = {}
     if active_only:
@@ -45,7 +45,6 @@ async def get_restaurant(
     current_user = Depends(get_current_user_optional)
 ):
     """Get restaurant by ID (public endpoint)."""
-    db = get_db()
     
     restaurant = await db.restaurant.find_unique(
         where={"id": restaurant_id},
@@ -64,10 +63,10 @@ async def get_restaurant(
 @router.post("/", response_model=RestaurantResponse)
 async def create_restaurant(
     restaurant_data: RestaurantCreate,
-    current_user = Depends(get_current_admin_user)
+    current_user = Depends(get_current_admin_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create a new restaurant (Admin only)."""
-    db = get_db()
     
     try:
         # Create restaurant with address in a transaction
@@ -125,7 +124,6 @@ async def update_restaurant(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Update restaurant (Manager/Admin only). Managers can only update their own restaurant."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
@@ -173,10 +171,10 @@ async def update_restaurant(
 @router.delete("/{restaurant_id}")
 async def delete_restaurant(
     restaurant_id: int,
-    current_user = Depends(get_current_admin_user)
+    current_user = Depends(get_current_admin_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete restaurant (Admin only)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
@@ -203,7 +201,6 @@ async def toggle_restaurant_status(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Toggle restaurant active status (Manager/Admin only)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
@@ -245,7 +242,6 @@ async def get_restaurant_staff(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Get restaurant staff (Manager/Admin only). Managers can only see their own restaurant staff."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})

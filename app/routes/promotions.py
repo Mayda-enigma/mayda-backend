@@ -6,7 +6,7 @@ from app.models.promotion import (
     PromotionUsageRequest, PromotionUsageResponse, ActivePromotionsResponse,
     PromotionType, DiscountType
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user
 )
@@ -20,10 +20,10 @@ router = APIRouter(prefix="/promotions", tags=["Promotions"])
 @router.get("/active", response_model=ActivePromotionsResponse)
 async def get_active_promotions(
     restaurant_id: Optional[int] = Query(None),
-    promotion_type: Optional[PromotionType] = Query(None)
+    promotion_type: Optional[PromotionType] = Query(None),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get all active promotions (Public endpoint)."""
-    db = get_db()
     
     # Build where clause for active promotions
     where_clause = {
@@ -94,7 +94,6 @@ async def get_restaurant_promotions(
     limit: int = Query(20, ge=1, le=100)
 ):
     """Get promotions for a specific restaurant (Public endpoint)."""
-    db = get_db()
     
     # Validate restaurant exists and is active
     restaurant = await db.restaurant.find_unique(
@@ -146,9 +145,8 @@ async def get_restaurant_promotions(
 
 
 @router.post("/calculate", response_model=PromotionUsageResponse)
-async def calculate_promotion_discount(request: PromotionUsageRequest):
+async def calculate_promotion_discount(request: PromotionUsageRequest, db: "Prisma" = Depends(get_db_session)):
     """Calculate discount for a promotion (Public endpoint)."""
-    db = get_db()
     
     promotion = await db.promotion.find_unique(
         where={"id": request.promotionId},
@@ -242,7 +240,6 @@ async def calculate_promotion_discount(request: PromotionUsageRequest):
 @router.get("/{promotion_id}", response_model=PromotionResponse)
 async def get_promotion(promotion_id: int):
     """Get promotion by ID (Public endpoint)."""
-    db = get_db()
     
     promotion = await db.promotion.find_unique(
         where={"id": promotion_id},
@@ -283,10 +280,10 @@ async def get_promotion(promotion_id: int):
 @router.post("/", response_model=PromotionResponse)
 async def create_promotion(
     promotion_data: PromotionCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create promotion (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -399,7 +396,6 @@ async def get_restaurant_promotions_management(
     current_user = Depends(get_current_staff_user)
 ):
     """Get restaurant promotions for management (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER", "WAITER"]:
@@ -461,10 +457,10 @@ async def get_restaurant_promotions_management(
 async def update_promotion(
     promotion_id: int,
     promotion_update: PromotionUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update promotion (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -600,7 +596,6 @@ async def delete_promotion(
     current_user = Depends(get_current_staff_user)
 ):
     """Delete promotion (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -641,7 +636,6 @@ async def increment_promotion_usage(
     current_user = Depends(get_current_staff_user)
 ):
     """Increment promotion usage count (Staff only - when processing orders)."""
-    db = get_db()
     
     promotion = await db.promotion.find_unique(where={"id": promotion_id})
     if not promotion:

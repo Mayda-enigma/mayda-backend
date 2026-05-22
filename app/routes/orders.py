@@ -6,7 +6,7 @@ from app.models.order import (
     OrderCreate, OrderResponse, OrderListResponse,
     PublicOrderCreate, OrderStatusUpdate, OrderStatus, OrderType, DeliveryOrderCreate
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 # ==================== PUBLIC ORDER ENDPOINTS (No Auth Required) ====================
 
 @router.post("/public", response_model=OrderResponse)
-async def create_public_order(order_data: PublicOrderCreate):
+async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depends(get_db_session)):
     """
     Create order without authentication (for walk-in customers using QR codes/NFC at tables).
     
@@ -27,7 +27,6 @@ async def create_public_order(order_data: PublicOrderCreate):
     - Must specify a valid tableId
     - Order amounts limited to prevent abuse
     """
-    db = get_db()
     
     # Security restriction: Only DINE_IN orders allowed for public endpoint
     if order_data.type != OrderType.DINE_IN:
@@ -198,10 +197,10 @@ async def create_public_order(order_data: PublicOrderCreate):
 @router.post("/", response_model=OrderResponse)
 async def create_order(
     order_data: OrderCreate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create order for authenticated user using their stored profile information."""
-    db = get_db()
     
     # Get user's complete profile including address
     user_profile = await db.user.find_unique(
@@ -369,7 +368,6 @@ async def create_delivery_order(
     current_user = Depends(get_current_user)
 ):
     """Create delivery order for authenticated user with automatic address handling."""
-    db = get_db()
     
     # Get user's complete profile including address
     user_profile = await db.user.find_unique(
@@ -438,10 +436,10 @@ async def create_delivery_order(
 async def get_my_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current user's orders."""
-    db = get_db()
     
     orders = await db.order.find_many(
         where={"userId": current_user.id},
@@ -497,7 +495,6 @@ async def get_order(
     current_user = Depends(get_current_user)
 ):
     """Get order by ID. Users can only see their own orders, staff can see restaurant orders."""
-    db = get_db()
     
     order = await db.order.find_unique(
         where={"id": order_id},
@@ -544,14 +541,13 @@ async def get_order(
 
 
 @router.get("/public/status/{order_number}", response_model=OrderResponse)
-async def get_public_order_status(order_number: str):
+async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_db_session)):
     """
     Get order status by order number (Public endpoint for QR code orders).
     
     This allows customers who placed orders via QR codes to check their order status
     without authentication by using the order number they received.
     """
-    db = get_db()
     
     order = await db.order.find_unique(
         where={"orderNumber": order_number},
@@ -587,10 +583,10 @@ async def get_restaurant_orders(
     status: Optional[OrderStatus] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get orders for a restaurant (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -661,7 +657,6 @@ async def update_order_status(
     current_user = Depends(get_current_staff_user)
 ):
     """Update order status (Staff only)."""
-    db = get_db()
     
     # Check if order exists
     order = await db.order.find_unique(where={"id": order_id})
@@ -730,7 +725,6 @@ async def get_table_current_orders(
     current_user = Depends(get_current_staff_user)
 ):
     """Get current orders for a specific table (Staff only)."""
-    db = get_db()
     
     # Check if table exists
     table = await db.table.find_unique(where={"id": table_id})

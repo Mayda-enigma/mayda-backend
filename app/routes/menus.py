@@ -5,7 +5,7 @@ from app.models.menu import (
     MenuCategoryCreate, MenuCategoryUpdate, MenuCategoryResponse,
     DishCreate, DishUpdate, DishResponse, MenuWithCategories
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_manager_or_admin, get_current_staff_user,
     get_current_user_optional
@@ -21,10 +21,10 @@ router = APIRouter(prefix="/menus", tags=["Menus & Dishes"])
 async def get_restaurant_menus(
     restaurant_id: int,
     active_only: bool = Query(True),
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get all menus for a restaurant with categories and dishes (public endpoint)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
@@ -64,7 +64,6 @@ async def create_menu(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Create a new menu (Manager/Admin only)."""
-    db = get_db()
     
     # Check if restaurant exists
     restaurant = await db.restaurant.find_unique(where={"id": menu_data.restaurantId})
@@ -105,10 +104,10 @@ async def create_menu(
 async def update_menu(
     menu_id: int,
     menu_data: MenuUpdate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update menu (Manager/Admin only)."""
-    db = get_db()
     
     # Check if menu exists
     menu = await db.menu.find_unique(
@@ -161,7 +160,6 @@ async def delete_menu(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Delete menu (Manager/Admin only)."""
-    db = get_db()
     
     # Check if menu exists
     menu = await db.menu.find_unique(
@@ -197,10 +195,10 @@ async def delete_menu(
 @router.post("/categories", response_model=MenuCategoryResponse)
 async def create_menu_category(
     category_data: MenuCategoryCreate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create a new menu category (Manager/Admin only)."""
-    db = get_db()
     
     # Check if menu exists and get restaurant info
     menu = await db.menu.find_unique(
@@ -248,7 +246,6 @@ async def update_menu_category(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Update menu category (Manager/Admin only)."""
-    db = get_db()
     
     # Check if category exists
     category = await db.menucategory.find_unique(
@@ -298,10 +295,10 @@ async def update_menu_category(
 @router.delete("/categories/{category_id}")
 async def delete_menu_category(
     category_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete menu category (Manager/Admin only)."""
-    db = get_db()
     
     # Check if category exists
     category = await db.menucategory.find_unique(
@@ -340,7 +337,6 @@ async def create_dish(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Create a new dish (Manager/Admin only)."""
-    db = get_db()
     
     # Check if category exists and get restaurant info
     category = await db.menucategory.find_unique(
@@ -389,10 +385,10 @@ async def create_dish(
 @router.get("/dishes/{dish_id}", response_model=DishResponse)
 async def get_dish(
     dish_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get dish by ID (public endpoint)."""
-    db = get_db()
     
     dish = await db.dish.find_unique(where={"id": dish_id})
     
@@ -412,7 +408,6 @@ async def update_dish(
     current_user = Depends(get_current_manager_or_admin)
 ):
     """Update dish (Manager/Admin only)."""
-    db = get_db()
     
     # Check if dish exists
     dish = await db.dish.find_unique(
@@ -462,10 +457,10 @@ async def update_dish(
 @router.delete("/dishes/{dish_id}")
 async def delete_dish(
     dish_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete dish (Manager/Admin only)."""
-    db = get_db()
     
     # Check if dish exists
     dish = await db.dish.find_unique(
@@ -502,7 +497,6 @@ async def toggle_dish_availability(
     current_user = Depends(get_current_staff_user)
 ):
     """Toggle dish availability (Staff only - for their restaurant)."""
-    db = get_db()
     
     # Check if dish exists
     dish = await db.dish.find_unique(
@@ -547,7 +541,6 @@ async def update_dish_quantity(
     current_user = Depends(get_current_staff_user)
 ):
     """Update dish quantity (Staff only - for their restaurant)."""
-    db = get_db()
     
     # Check if dish exists
     dish = await db.dish.find_unique(
