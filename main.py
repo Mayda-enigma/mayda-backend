@@ -6,7 +6,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
-from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory
+from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 
@@ -122,6 +122,7 @@ app.include_router(otp.router, prefix="/api")
 app.include_router(loyalty.router, prefix="/api")
 app.include_router(ingredients.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 
 
 # Health check endpoint
