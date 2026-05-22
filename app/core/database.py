@@ -26,3 +26,8 @@ def get_db() -> Prisma:
     if db is None:
         raise RuntimeError("Database not connected. Call connect_db() first.")
     return db
+
+
+async def get_db_session():
+    """FastAPI dependency that yields the shared Prisma client."""
+    yield get_db()
