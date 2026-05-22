@@ -31,3 +31,13 @@ class ForecastResponse(BaseModel):
 
 class TranscribeResponse(BaseModel):
     text: str
+
+class Anomaly(BaseModel):
+    id: str
+    type: str
+    severity: str
+    details: dict | None = None
+    acknowledged: bool = False
+
+class AnomalyAckResponse(BaseModel):
+    success: bool
