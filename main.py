@@ -16,6 +16,13 @@ from app.middleware.request_id import RequestIdMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
+    try:
+        await connect_db()
+        print("Database connected successfully")
+        await ensure_admin_user_exists()
+    except Exception as e:
+        print(f"Failed to connect to database: {e}")
+        raise
     yield
 
 
