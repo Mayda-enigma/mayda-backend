@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +11,12 @@ from app.routes import auth, protected, restaurants, tables, menus, orders, rese
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown lifecycle."""
+    yield
 
 
 # Create FastAPI app
