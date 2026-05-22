@@ -9,3 +9,12 @@ class RecommendRequest(BaseModel):
 
 class RecommendResponse(BaseModel):
     recommendations: list[Any]
+
+class SearchRequest(BaseModel):
+    query: str
+    restaurantId: str | None = None
+    limit: int | None = None
+
+
+class SearchResponse(BaseModel):
+    results: list[Any]
