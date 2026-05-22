@@ -6,6 +6,7 @@ and to guarantee the header is injected before any streaming response starts.
 
 import uuid
 
+from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -33,4 +34,11 @@ class RequestIdMiddleware:
         # Attach to request state so route handlers can read it.
         request.state.request_id = request_id
 
-        await self.app(scope, receive, send)
+        async def _send_with_request_id(message: dict) -> None:
+            """Inject X-Request-Id into the response start message."""
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.append(REQUEST_ID_HEADER, request_id)
+            await send(message)
+
+        await self.app(scope, receive, _send_with_request_id)
