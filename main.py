@@ -6,10 +6,8 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.core.config import settings
-from app.core.database import connect_db, disconnect_db, get_db
+from app.core.database import connect_db, disconnect_db
 from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai
-from app.auth.jwt import get_password_hash
-from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
 
 
@@ -19,7 +17,6 @@ async def lifespan(app: FastAPI):
     try:
         await connect_db()
         print("Database connected successfully")
-        await ensure_admin_user_exists()
     except Exception as e:
         print(f"Failed to connect to database: {e}")
         raise
@@ -65,45 +62,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong"
         }
     )
-
-
-async def ensure_admin_user_exists():
-    """Check if an admin user exists, create one if not."""
-    try:
-        db = get_db()
-        
-        # Check if any admin user exists
-        admin_user = await db.user.find_first(
-            where={"role": UserRole.ADMIN.value}
-        )
-        
-        if admin_user:
-            print(f"Admin user already exists: {admin_user.email}")
-            return
-        
-        # Create default admin user
-        hashed_password = get_password_hash("admin123456")
-        
-        admin_user = await db.user.create(
-            data={
-                "email": "admin@caravane.com",
-                "phone": 1234567890,
-                "firstName": "Admin",
-                "lastName": "User",
-                "password": hashed_password,
-                "role": UserRole.ADMIN.value,
-                "isActive": True
-            }
-        )
-        
-        print("Default admin user created successfully!")
-        print(f"Email: {admin_user.email}")
-        print("Password: admin123456")
-        print("Please change the default credentials after first login!")
-        
-    except Exception as e:
-        print(f"Error creating admin user: {e}")
-
 
 # Include routers
 app.include_router(auth.router, prefix="/api")
