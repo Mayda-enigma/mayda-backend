@@ -11,6 +11,7 @@ from app.routes import auth, protected, restaurants, tables, menus, orders, rese
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.utils.logging import logger
 
 
@@ -44,6 +45,9 @@ app = FastAPI(
 
 # Request ID middleware (added before CORS)
 app.add_middleware(RequestIdMiddleware)
+
+# Request logging middleware (runs after request_id is set)
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS middleware
 app.add_middleware(
