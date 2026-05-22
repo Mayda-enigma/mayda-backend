@@ -28,7 +28,7 @@ services:
     container_name: restaurant_api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       - DATABASE_URL=postgresql://caravane_user:caravane_password@db:5432/caravane_db?schema=public
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
