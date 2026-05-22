@@ -243,7 +243,8 @@ async def create_public_reservation(
 @router.post("/", response_model=ReservationResponse)
 async def create_reservation(
     reservation_data: ReservationCreate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create reservation for authenticated user using their stored profile information."""
     
@@ -393,7 +394,8 @@ async def get_my_reservations(
 @router.get("/{reservation_id}", response_model=ReservationResponse)
 async def get_reservation(
     reservation_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get reservation by ID. Users can only see their own reservations, staff can see restaurant reservations."""
     
@@ -524,7 +526,8 @@ async def get_restaurant_reservations(
 async def update_reservation_status(
     reservation_id: int,
     status_update: ReservationStatusUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update reservation status (Staff only)."""
     
@@ -681,7 +684,8 @@ async def update_reservation(
 @router.delete("/{reservation_id}")
 async def cancel_reservation(
     reservation_id: int,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Cancel reservation (Customer or Staff)."""
     

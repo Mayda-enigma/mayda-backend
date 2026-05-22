@@ -16,7 +16,8 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 @router.post("/initiate-with-otp", response_model=PaymentInitiateResponse)
 async def initiate_payment_with_otp(
     payment_request: PaymentInitiateRequest,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Initiate payment with OTP verification for added security.
@@ -414,7 +415,8 @@ async def get_payment(
 @router.get("/order/{order_id}", response_model=Optional[PaymentStatusResponse])
 async def get_payment_by_order(
     order_id: int,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get payment status for a specific order."""
     

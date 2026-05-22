@@ -365,7 +365,8 @@ async def create_order(
 @router.post("/delivery", response_model=OrderResponse)
 async def create_delivery_order(
     order_data: DeliveryOrderCreate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create delivery order for authenticated user with automatic address handling."""
     
@@ -492,7 +493,8 @@ async def get_my_orders(
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get order by ID. Users can only see their own orders, staff can see restaurant orders."""
     
@@ -654,7 +656,8 @@ async def get_restaurant_orders(
 async def update_order_status(
     order_id: int,
     status_update: OrderStatusUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update order status (Staff only)."""
     
@@ -722,7 +725,8 @@ async def update_order_status(
 @router.get("/table/{table_id}/current", response_model=List[OrderListResponse])
 async def get_table_current_orders(
     table_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current orders for a specific table (Staff only)."""
     

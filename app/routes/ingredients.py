@@ -86,7 +86,8 @@ async def get_ingredients(
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get ingredients with filters (Staff only)."""
     
@@ -190,7 +191,8 @@ async def get_ingredient(
 async def update_ingredient(
     ingredient_id: int,
     ingredient_data: IngredientUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update ingredient (Manager/Admin only)."""
     
@@ -334,7 +336,8 @@ async def delete_ingredient(
 @router.post("/dish-ingredients", response_model=DishIngredientResponse, status_code=status.HTTP_201_CREATED)
 async def add_ingredient_to_dish(
     dish_ingredient_data: DishIngredientCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Add ingredient to dish (Manager/Admin only)."""
     
@@ -537,7 +540,8 @@ async def get_dish_ingredients(
 async def update_dish_ingredient(
     dish_ingredient_id: int,
     update_data: DishIngredientUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update dish ingredient relation (Manager/Admin only)."""
     
@@ -694,7 +698,8 @@ async def remove_ingredient_from_dish(
 
 @router.get("/stats", response_model=IngredientStatsResponse)
 async def get_ingredient_stats(
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get ingredient statistics (Staff only)."""
     
@@ -757,7 +762,8 @@ async def get_ingredient_stats(
 
 @router.get("/categories", response_model=List[IngredientCategoryResponse])
 async def get_ingredient_categories(
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get ingredient breakdown by category (Staff only)."""
     

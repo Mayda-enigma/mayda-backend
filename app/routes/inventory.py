@@ -118,7 +118,8 @@ async def get_inventory_items(
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory items with filters (Staff only)."""
     
@@ -234,7 +235,8 @@ async def get_inventory_item(
 async def update_inventory_item(
     item_id: int,
     item_data: InventoryItemUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update inventory item (Manager/Admin only)."""
     
@@ -357,7 +359,8 @@ async def delete_inventory_item(
 @router.post("/stock/update", response_model=InventoryStockUpdateResponse)
 async def update_stock_quantity(
     stock_update: InventoryStockUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update stock quantity (add/consume stock) (Staff only)."""
     
@@ -460,7 +463,8 @@ async def get_low_stock_alerts(
 @router.get("/stats/{restaurant_id}", response_model=InventoryStatsResponse)
 async def get_inventory_stats(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory statistics for restaurant (Staff only)."""
     
@@ -587,7 +591,8 @@ async def get_inventory_by_category(
 @router.get("/suppliers/{restaurant_id}", response_model=List[InventorySupplierResponse])
 async def get_inventory_by_supplier(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory breakdown by supplier (Staff only)."""
     

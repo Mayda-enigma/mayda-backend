@@ -119,7 +119,8 @@ async def get_dish_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
-    verified_only: bool = Query(False)
+    verified_only: bool = Query(False),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get reviews for a specific dish (Public endpoint)."""
     
@@ -381,7 +382,8 @@ async def create_review(
 async def get_my_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current user's reviews."""
     
@@ -479,7 +481,8 @@ async def get_review(
 async def update_review(
     review_id: int,
     review_update: ReviewUpdate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update review (Customer only - their own reviews)."""
     
@@ -616,7 +619,8 @@ async def get_restaurant_reviews_management(
     limit: int = Query(50, ge=1, le=100),
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
     sentiment_filter: Optional[str] = Query(None),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get restaurant reviews for management (Staff only)."""
     

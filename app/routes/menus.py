@@ -61,7 +61,8 @@ async def get_restaurant_menus(
 @router.post("/", response_model=MenuResponse)
 async def create_menu(
     menu_data: MenuCreate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create a new menu (Manager/Admin only)."""
     
@@ -157,7 +158,8 @@ async def update_menu(
 @router.delete("/{menu_id}")
 async def delete_menu(
     menu_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete menu (Manager/Admin only)."""
     
@@ -243,7 +245,8 @@ async def create_menu_category(
 async def update_menu_category(
     category_id: int,
     category_data: MenuCategoryUpdate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update menu category (Manager/Admin only)."""
     
@@ -334,7 +337,8 @@ async def delete_menu_category(
 @router.post("/dishes", response_model=DishResponse)
 async def create_dish(
     dish_data: DishCreate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create a new dish (Manager/Admin only)."""
     
@@ -405,7 +409,8 @@ async def get_dish(
 async def update_dish(
     dish_id: int,
     dish_data: DishUpdate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update dish (Manager/Admin only)."""
     
@@ -494,7 +499,8 @@ async def delete_dish(
 @router.patch("/dishes/{dish_id}/toggle-availability")
 async def toggle_dish_availability(
     dish_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Toggle dish availability (Staff only - for their restaurant)."""
     
@@ -538,7 +544,8 @@ async def toggle_dish_availability(
 async def update_dish_quantity(
     dish_id: int,
     quantity: int = Query(..., ge=0),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update dish quantity (Staff only - for their restaurant)."""
     

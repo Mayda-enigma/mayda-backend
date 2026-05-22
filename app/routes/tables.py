@@ -45,7 +45,8 @@ async def get_restaurant_tables(
 @router.get("/{table_id}", response_model=TableResponse)
 async def get_table(
     table_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get table by ID (public endpoint)."""
     
@@ -122,7 +123,8 @@ async def create_table(
 async def update_table(
     table_id: int,
     table_data: TableUpdate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update table (Manager/Admin only). Managers can only update tables in their restaurant."""
     
@@ -235,7 +237,8 @@ async def delete_table(
 @router.patch("/{table_id}/toggle-status")
 async def toggle_table_status(
     table_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Toggle table active status (Staff only - for their restaurant)."""
     
@@ -327,7 +330,8 @@ async def get_table_current_orders(
 @router.get("/restaurant/{restaurant_id}/availability")
 async def get_tables_availability(
     restaurant_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get table availability status for a restaurant (public endpoint for customers)."""
     

@@ -42,7 +42,8 @@ async def get_restaurants(
 @router.get("/{restaurant_id}", response_model=RestaurantResponse)
 async def get_restaurant(
     restaurant_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get restaurant by ID (public endpoint)."""
     
@@ -121,7 +122,8 @@ async def create_restaurant(
 async def update_restaurant(
     restaurant_id: int,
     restaurant_data: RestaurantUpdate,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update restaurant (Manager/Admin only). Managers can only update their own restaurant."""
     
@@ -198,7 +200,8 @@ async def delete_restaurant(
 @router.patch("/{restaurant_id}/toggle-status")
 async def toggle_restaurant_status(
     restaurant_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Toggle restaurant active status (Manager/Admin only)."""
     
@@ -239,7 +242,8 @@ async def toggle_restaurant_status(
 @router.get("/{restaurant_id}/staff")
 async def get_restaurant_staff(
     restaurant_id: int,
-    current_user = Depends(get_current_manager_or_admin)
+    current_user = Depends(get_current_manager_or_admin),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get restaurant staff (Manager/Admin only). Managers can only see their own restaurant staff."""
     

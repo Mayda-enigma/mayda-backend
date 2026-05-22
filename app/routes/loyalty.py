@@ -31,7 +31,7 @@ async def get_loyalty_program_info(db: "Prisma" = Depends(get_db_session)):
 # ==================== USER LOYALTY ENDPOINTS ====================
 
 @router.get("/my-card", response_model=LoyaltyCardResponse)
-async def get_my_loyalty_card(current_user = Depends(get_current_user)):
+async def get_my_loyalty_card(current_user = Depends(get_current_user), db: "Prisma" = Depends(get_db_session)):
     """Get current user's loyalty card."""
     
     loyalty_card = await db.loyaltycard.find_unique(
@@ -142,7 +142,7 @@ async def get_my_loyalty_transactions(
 
 
 @router.get("/my-stats", response_model=LoyaltyStatsResponse)
-async def get_my_loyalty_stats(current_user = Depends(get_current_user)):
+async def get_my_loyalty_stats(current_user = Depends(get_current_user), db: "Prisma" = Depends(get_db_session)):
     """Get current user's loyalty statistics."""
     
     # Get user's loyalty card
@@ -302,7 +302,8 @@ async def redeem_points(
 @router.post("/award-points", response_model=PointsEarnedResponse)
 async def award_points_for_order(
     points_request: PointsEarnedRequest,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Award points to customer for completed order (Staff only)."""
     
@@ -512,7 +513,8 @@ async def get_restaurant_loyalty_stats(
 @router.post("/manual-transaction", response_model=LoyaltyTransactionResponse)
 async def create_manual_loyalty_transaction(
     transaction_data: LoyaltyTransactionCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create manual loyalty transaction (Manager/Admin only)."""
     

@@ -69,7 +69,7 @@ async def register(user_data: UserRegister, db: "Prisma" = Depends(get_db_sessio
 
 
 @router.post("/staff-login", response_model=TempTokenResponse)
-async def staff_login(user_data: StaffLogin):
+async def staff_login(user_data: StaffLogin, db: "Prisma" = Depends(get_db_session)):
     """Staff login with 2FA - returns temporary token."""
     
     # Find user by phone
@@ -169,7 +169,7 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: "Prisma" = 
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(user_data: UserLogin):
+async def login(user_data: UserLogin, db: "Prisma" = Depends(get_db_session)):
     """Authenticate regular user and return access token (customers only)."""
     
     # Find user by email or phone
@@ -290,7 +290,7 @@ async def refresh_token(token_data: RefreshTokenRequest, db: "Prisma" = Depends(
 
 
 @router.post("/logout")
-async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_current_user)):
+async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_current_user), db: "Prisma" = Depends(get_db_session)):
     """Logout user by revoking refresh token."""
     
     # Revoke the refresh token
@@ -307,7 +307,7 @@ async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_curre
 
 
 @router.post("/logout-all")
-async def logout_all(current_user=Depends(get_current_user)):
+async def logout_all(current_user=Depends(get_current_user), db: "Prisma" = Depends(get_db_session)):
     """Logout user from all devices by revoking all refresh tokens."""
     
     # Revoke all refresh tokens for the user
@@ -331,7 +331,8 @@ async def get_current_user_info(current_user=Depends(get_current_user), db: "Pri
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     user_update: UserUpdate, 
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update current user information."""
     
@@ -435,7 +436,7 @@ async def change_password(
 
 # Admin routes
 @router.get("/users", response_model=list[UserResponse])
-async def get_all_users(current_user=Depends(get_current_admin_user)):
+async def get_all_users(current_user=Depends(get_current_admin_user), db: "Prisma" = Depends(get_db_session)):
     """Get all users (Admin only)."""
     
     users = await db.user.find_many(
@@ -449,7 +450,8 @@ async def get_all_users(current_user=Depends(get_current_admin_user)):
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
-    current_user=Depends(get_current_admin_user)
+    current_user=Depends(get_current_admin_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update any user (Admin only)."""
     

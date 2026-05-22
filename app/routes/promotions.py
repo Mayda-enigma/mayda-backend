@@ -91,7 +91,8 @@ async def get_restaurant_promotions(
     restaurant_id: int,
     active_only: bool = Query(True),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100)
+    limit: int = Query(20, ge=1, le=100),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get promotions for a specific restaurant (Public endpoint)."""
     
@@ -238,7 +239,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: "Pris
 # ==================== AUTHENTICATED PROMOTION ENDPOINTS ====================
 
 @router.get("/{promotion_id}", response_model=PromotionResponse)
-async def get_promotion(promotion_id: int):
+async def get_promotion(promotion_id: int, db: "Prisma" = Depends(get_db_session)):
     """Get promotion by ID (Public endpoint)."""
     
     promotion = await db.promotion.find_unique(
@@ -393,7 +394,8 @@ async def get_restaurant_promotions_management(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = Query(False),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get restaurant promotions for management (Staff only)."""
     
@@ -593,7 +595,8 @@ async def update_promotion(
 @router.delete("/{promotion_id}")
 async def delete_promotion(
     promotion_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete promotion (Manager/Admin only)."""
     
@@ -633,7 +636,8 @@ async def delete_promotion(
 @router.post("/{promotion_id}/increment-usage")
 async def increment_promotion_usage(
     promotion_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Increment promotion usage count (Staff only - when processing orders)."""
     
