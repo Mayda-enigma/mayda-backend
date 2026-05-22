@@ -6,7 +6,7 @@ from app.models.payment import (
     PaymentInitiateResponse, PaymentStatusResponse, PaymentListResponse,
     GUIDINI_PAY_URL, GUIDINI_PAY_HEADERS
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import get_current_user, get_current_staff_user
 
 
@@ -16,7 +16,8 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 @router.post("/initiate-with-otp", response_model=PaymentInitiateResponse)
 async def initiate_payment_with_otp(
     payment_request: PaymentInitiateRequest,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Initiate payment with OTP verification for added security.
@@ -30,7 +31,6 @@ async def initiate_payment_with_otp(
             detail="SMS service is not available for secure payments"
         )
     
-    db = get_db()
     
     # Check if Guidini Pay is configured
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
@@ -96,13 +96,13 @@ async def initiate_payment_with_otp(
 @router.post("/initiate", response_model=PaymentInitiateResponse)
 async def initiate_payment(
     payment_request: PaymentInitiateRequest,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Initiate a payment for an order using Guidini Pay.
     This will create a payment record and return the payment form URL.
     """
-    db = get_db()
     
     # Check if Guidini Pay is configured
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
@@ -227,13 +227,13 @@ async def initiate_payment(
 @router.get("/receipt/{order_number}")
 async def get_payment_receipt(
     order_number: str,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Get payment receipt from Guidini Pay by order number.
     Routes the request to Guidini Pay receipt API and returns the response.
     """
-    db = get_db()
     
     try:
         # First, find the order by orderNumber to validate access
@@ -293,13 +293,13 @@ async def get_payment_receipt(
 @router.get("/show/{order_number}")
 async def show_payment_status(
     order_number: str,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Get payment status from Guidini Pay by order number.
     Routes the request to Guidini Pay and returns the response.
     """
-    db = get_db()
     
     try:
         # First, find the order by orderNumber to validate access
@@ -359,10 +359,10 @@ async def show_payment_status(
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
     payment_id: int,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get payment details by ID."""
-    db = get_db()
     
     try:
         payment = await db.payments.find_unique(
@@ -415,10 +415,10 @@ async def get_payment(
 @router.get("/order/{order_id}", response_model=Optional[PaymentStatusResponse])
 async def get_payment_by_order(
     order_id: int,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get payment status for a specific order."""
-    db = get_db()
     
     try:
         # Get the order first to validate access
@@ -470,13 +470,13 @@ async def list_payments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     restaurant_id: Optional[int] = Query(None),
-    current_user=Depends(get_current_staff_user)
+    current_user=Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     List payments (staff only).
     Filter by restaurant if specified.
     """
-    db = get_db()
     
     try:
         # Build where clause
@@ -542,12 +542,11 @@ async def list_payments(
 
 
 @router.get("/callback")
-async def payment_callback(order_number: str = Query(...)):
+async def payment_callback(order_number: str = Query(...), db: "Prisma" = Depends(get_db_session)):
     """
     Payment confirmation callback from Guidini Pay.
     Called when payment is confirmed with order_number as query parameter.
     """
-    db = get_db()
     
     try:
         # Find the order by orderNumber
@@ -606,13 +605,13 @@ async def guidini_webhook():
 async def update_payment_status(
     order_id: int,
     new_status: str,
-    current_user=Depends(get_current_staff_user)
+    current_user=Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Manually update payment status (staff only).
     This is for manual payment methods like cash.
     """
-    db = get_db()
     
     try:
         # Validate the new status

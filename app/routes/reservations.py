@@ -6,7 +6,7 @@ from app.models.reservation import (
     PublicReservationCreate, ReservationStatusUpdate, ReservationStatus,
     ReservationAvailabilityRequest, ReservationAvailabilityResponse, AvailableTable
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user, get_current_user_optional
 )
@@ -18,14 +18,13 @@ router = APIRouter(prefix="/reservations", tags=["Reservations"])
 # ==================== PUBLIC RESERVATION ENDPOINTS ====================
 
 @router.post("/availability", response_model=ReservationAvailabilityResponse)
-async def check_availability(request: ReservationAvailabilityRequest):
+async def check_availability(request: ReservationAvailabilityRequest, db: "Prisma" = Depends(get_db_session)):
     """
     Check table availability for a specific time slot (Public endpoint).
     
     This endpoint is public to allow potential customers to check availability
     before deciding to make a reservation through the app (which requires authentication).
     """
-    db = get_db()
     
     # Validate restaurant exists and is active
     restaurant = await db.restaurant.find_unique(where={"id": request.restaurantId})
@@ -120,10 +119,10 @@ async def check_availability(request: ReservationAvailabilityRequest):
 @router.post("/public", response_model=ReservationResponse)
 async def create_public_reservation(
     reservation_data: PublicReservationCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create reservation without customer authentication (Staff only - for phone bookings/walk-ins)."""
-    db = get_db()
     
     # Check permissions - only staff can create public reservations
     if current_user.role not in ["ADMIN", "MANAGER", "WAITER"]:
@@ -244,10 +243,10 @@ async def create_public_reservation(
 @router.post("/", response_model=ReservationResponse)
 async def create_reservation(
     reservation_data: ReservationCreate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create reservation for authenticated user using their stored profile information."""
-    db = get_db()
     
     # Get user's complete profile for contact information
     user_profile = await db.user.find_unique(
@@ -352,10 +351,10 @@ async def get_my_reservations(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     status: Optional[ReservationStatus] = Query(None),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get current user's reservations."""
-    db = get_db()
     
     where_clause = {"userId": current_user.id}
     if status:
@@ -395,10 +394,10 @@ async def get_my_reservations(
 @router.get("/{reservation_id}", response_model=ReservationResponse)
 async def get_reservation(
     reservation_id: int,
-    current_user = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get reservation by ID. Users can only see their own reservations, staff can see restaurant reservations."""
-    db = get_db()
     
     reservation = await db.reservation.find_unique(
         where={"id": reservation_id},
@@ -460,10 +459,10 @@ async def get_restaurant_reservations(
     status: Optional[ReservationStatus] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get reservations for a restaurant (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -527,10 +526,10 @@ async def get_restaurant_reservations(
 async def update_reservation_status(
     reservation_id: int,
     status_update: ReservationStatusUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update reservation status (Staff only)."""
-    db = get_db()
     
     # Check if reservation exists
     reservation = await db.reservation.find_unique(where={"id": reservation_id})
@@ -587,10 +586,10 @@ async def update_reservation_status(
 async def update_reservation(
     reservation_id: int,
     reservation_update: ReservationUpdate,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update reservation details (Customer or Staff)."""
-    db = get_db()
     
     # Check if reservation exists
     reservation = await db.reservation.find_unique(where={"id": reservation_id})
@@ -685,10 +684,10 @@ async def update_reservation(
 @router.delete("/{reservation_id}")
 async def cancel_reservation(
     reservation_id: int,
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Cancel reservation (Customer or Staff)."""
-    db = get_db()
     
     # Check if reservation exists
     reservation = await db.reservation.find_unique(where={"id": reservation_id})

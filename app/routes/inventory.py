@@ -7,7 +7,7 @@ from app.models.inventory import (
     InventoryLowStockAlert, InventoryCategoryResponse,
     InventorySupplierResponse
 )
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user
 )
@@ -21,10 +21,10 @@ router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 @router.post("/items", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_inventory_item(
     item_data: InventoryItemCreate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Create new inventory item (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -118,10 +118,10 @@ async def get_inventory_items(
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory items with filters (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -193,10 +193,10 @@ async def get_inventory_items(
 @router.get("/items/{item_id}", response_model=InventoryItemResponse)
 async def get_inventory_item(
     item_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get single inventory item (Staff only)."""
-    db = get_db()
     
     # Get inventory item
     inventory_item = await db.inventory.find_unique(
@@ -235,10 +235,10 @@ async def get_inventory_item(
 async def update_inventory_item(
     item_id: int,
     item_data: InventoryItemUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update inventory item (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -308,10 +308,10 @@ async def update_inventory_item(
 @router.delete("/items/{item_id}")
 async def delete_inventory_item(
     item_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Delete (deactivate) inventory item (Manager/Admin only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER"]:
@@ -359,10 +359,10 @@ async def delete_inventory_item(
 @router.post("/stock/update", response_model=InventoryStockUpdateResponse)
 async def update_stock_quantity(
     stock_update: InventoryStockUpdate,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Update stock quantity (add/consume stock) (Staff only)."""
-    db = get_db()
     
     # Get inventory item
     inventory_item = await db.inventory.find_unique(
@@ -422,10 +422,10 @@ async def update_stock_quantity(
 @router.get("/low-stock-alerts/{restaurant_id}", response_model=List[InventoryLowStockAlert])
 async def get_low_stock_alerts(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get low stock alerts for restaurant (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -463,10 +463,10 @@ async def get_low_stock_alerts(
 @router.get("/stats/{restaurant_id}", response_model=InventoryStatsResponse)
 async def get_inventory_stats(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory statistics for restaurant (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -533,10 +533,10 @@ async def get_inventory_stats(
 @router.get("/categories/{restaurant_id}", response_model=List[InventoryCategoryResponse])
 async def get_inventory_by_category(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory breakdown by category (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -591,10 +591,10 @@ async def get_inventory_by_category(
 @router.get("/suppliers/{restaurant_id}", response_model=List[InventorySupplierResponse])
 async def get_inventory_by_supplier(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user)
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """Get inventory breakdown by supplier (Staff only)."""
-    db = get_db()
     
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:

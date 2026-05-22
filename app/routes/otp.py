@@ -5,7 +5,7 @@ from app.models.otp import (
     PaymentOtpRequest, PaymentOtpVerifyRequest, StaffLoginRequest, StaffOtpVerifyRequest
 )
 from app.models.user import UserRole
-from app.core.database import get_db
+from app.core.database import get_db_session
 from app.utils.sms_service import sms_service
 from app.auth.jwt import create_access_token, create_refresh_token
 from app.middleware.roles import get_current_user
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/otp", tags=["OTP Authentication"])
 
 
 @router.post("/staff/send", response_model=OtpSendResponse)
-async def send_staff_otp(request: StaffLoginRequest):
+async def send_staff_otp(request: StaffLoginRequest, db: "Prisma" = Depends(get_db_session)):
     """
     Send OTP to staff member for authentication.
     Only staff members (WAITER, CHEF, MANAGER, ADMIN) can receive OTP.
@@ -26,7 +26,6 @@ async def send_staff_otp(request: StaffLoginRequest):
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Find staff user by phone
@@ -77,7 +76,7 @@ async def send_staff_otp(request: StaffLoginRequest):
 
 
 @router.post("/staff/verify", response_model=OtpVerifyResponse)
-async def verify_staff_otp(request: StaffOtpVerifyRequest):
+async def verify_staff_otp(request: StaffOtpVerifyRequest, db: "Prisma" = Depends(get_db_session)):
     """
     Verify OTP code for staff authentication and return access token.
     """
@@ -87,7 +86,6 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest):
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Find staff user by phone
@@ -155,7 +153,8 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest):
 @router.post("/payment/send", response_model=OtpSendResponse)
 async def send_payment_otp(
     request: PaymentOtpRequest,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Send OTP for payment confirmation.
@@ -167,7 +166,6 @@ async def send_payment_otp(
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Get order and validate ownership
@@ -223,7 +221,8 @@ async def send_payment_otp(
 @router.post("/payment/verify")
 async def verify_payment_otp(
     request: PaymentOtpVerifyRequest,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: "Prisma" = Depends(get_db_session),
 ):
     """
     Verify OTP for payment confirmation and mark order as paid.
@@ -234,7 +233,6 @@ async def verify_payment_otp(
             detail="SMS service is not available"
         )
     
-    db = get_db()
     
     try:
         # Get order and validate
