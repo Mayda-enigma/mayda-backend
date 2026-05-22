@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8080"]
+    BACKEND_CORS_ORIGINS: list[str] = []
+    BACKEND_CORS_ORIGIN_REGEX: str = (
+        r"https?://(localhost(:\d+)?|.*\.mayda\.app|.*\.vercel\.app)"
+    )
 
     # Environment
     ENVIRONMENT: str = "development"
