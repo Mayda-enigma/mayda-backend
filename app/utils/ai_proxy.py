@@ -1,5 +1,5 @@
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.core.config import settings
 
@@ -12,7 +12,7 @@ async def proxy_to_service(
     json: dict | None = None,
     files: dict | None = None,
     params: dict | None = None,
-    request_id: str,
+    request: Request,
     timeout: float = 15,
 ) -> dict:
     """Forward a request to an AI microservice and return the parsed JSON body.
@@ -22,6 +22,7 @@ async def proxy_to_service(
         HTTPException(504) if the request times out.
     """
     url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    request_id = getattr(request.state, "request_id", "")
     headers = {
         "X-Service-Token": settings.SERVICE_TOKEN,
         "X-Request-Id": request_id,
@@ -57,7 +58,7 @@ async def proxy_multipart_to_service(
     path: str,
     *,
     files: dict,
-    request_id: str,
+    request: Request,
     timeout: float = 30,
 ) -> dict:
     """Forward a multipart request to an AI microservice and return the parsed JSON body.
@@ -67,6 +68,7 @@ async def proxy_multipart_to_service(
         HTTPException(504) if the request times out.
     """
     url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    request_id = getattr(request.state, "request_id", "")
     headers = {
         "X-Service-Token": settings.SERVICE_TOKEN,
         "X-Request-Id": request_id,

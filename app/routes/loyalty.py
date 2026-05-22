@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
-from datetime import datetime, timedelta
 from app.models.loyalty import (
     LoyaltyCardResponse, LoyaltyTransactionCreate, LoyaltyTransactionResponse,
     LoyaltyTransactionListResponse, PointsRedemptionRequest, PointsRedemptionResponse,
@@ -135,7 +134,7 @@ async def get_my_loyalty_transactions(
                     where={"id": transaction.orderId}
                 )
                 transaction_dict["orderNumber"] = order.orderNumber if order else None
-            except:
+            except Exception:
                 transaction_dict["orderNumber"] = None
         
         transaction_list.append(LoyaltyTransactionListResponse.model_validate(transaction_dict))
@@ -269,7 +268,7 @@ async def redeem_points(
     
     try:
         # Create redemption transaction
-        transaction = await db.loyaltytransaction.create(
+        await db.loyaltytransaction.create(
             data={
                 "loyaltyCardId": loyalty_card.id,
                 "restaurantId": redemption_request.restaurantId,
@@ -384,7 +383,7 @@ async def award_points_for_order(
     
     try:
         # Create points earned transaction
-        transaction = await db.loyaltytransaction.create(
+        await db.loyaltytransaction.create(
             data={
                 "loyaltyCardId": loyalty_card.id,
                 "restaurantId": points_request.restaurantId,

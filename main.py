@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import asyncio
 import uvicorn
 
 from app.core.config import settings
@@ -9,6 +8,7 @@ from app.core.database import connect_db, disconnect_db, get_db
 from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
+from app.middleware.request_id import RequestIdMiddleware
 
 
 # Create FastAPI app
@@ -19,6 +19,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Request ID middleware (added before CORS)
+app.add_middleware(RequestIdMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -90,7 +93,7 @@ async def ensure_admin_user_exists():
         
         print("Default admin user created successfully!")
         print(f"Email: {admin_user.email}")
-        print(f"Password: admin123456")
+        print("Password: admin123456")
         print("Please change the default credentials after first login!")
         
     except Exception as e:

@@ -3,7 +3,7 @@ from typing import List, Optional
 from app.models.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
     DishIngredientCreate, DishIngredientUpdate, DishIngredientResponse,
-    DishIngredientsResponse, IngredientSearchFilters, IngredientStatsResponse,
+    DishIngredientsResponse, IngredientStatsResponse,
     IngredientCategoryResponse
 )
 from app.core.database import get_db

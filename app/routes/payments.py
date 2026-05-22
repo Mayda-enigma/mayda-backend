@@ -1,9 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
+from typing import Optional
 import requests
-from datetime import datetime
 from app.models.payment import (
-    PaymentCreate, PaymentResponse, PaymentInitiateRequest, 
+    PaymentResponse, PaymentInitiateRequest, 
     PaymentInitiateResponse, PaymentStatusResponse, PaymentListResponse,
     GUIDINI_PAY_URL, GUIDINI_PAY_HEADERS
 )
@@ -564,7 +563,7 @@ async def payment_callback(order_number: str = Query(...)):
             )
         
         # Update the order payment status to PAID
-        updated_order = await db.order.update(
+        await db.order.update(
             where={"orderNumber": order_number},
             data={"paymentStatus": "PAID"}
         )
@@ -644,7 +643,7 @@ async def update_payment_status(
             )
         
         # Update the order's payment status
-        updated_order = await db.order.update(
+        await db.order.update(
             where={"id": order_id},
             data={"paymentStatus": new_status}
         )

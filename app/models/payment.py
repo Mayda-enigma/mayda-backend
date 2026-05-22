@@ -1,7 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime
-import requests
 from app.core.config import settings    
 
 
