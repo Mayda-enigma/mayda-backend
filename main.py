@@ -119,6 +119,9 @@ app.include_router(reviews.router, prefix="/api")
 app.include_router(promotions.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
 app.include_router(otp.router, prefix="/api")
+app.include_router(loyalty.router, prefix="/api")
+app.include_router(ingredients.router, prefix="/api")
+app.include_router(inventory.router, prefix="/api")
 
 
 # Health check endpoint
