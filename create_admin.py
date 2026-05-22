@@ -23,6 +23,7 @@ sys.path.append(str(Path(__file__).parent))
 from app.core.database import connect_db, disconnect_db, get_db
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
+from app.utils.logging import logger
 
 
 async def create_admin_user(email: str, phone: int, first_name: str, last_name: str, password: str):
@@ -31,7 +32,7 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
         # Connect to database
         await connect_db()
         db = get_db()
-        
+
         # Check if user already exists
         existing_user = await db.user.find_first(
             where={
@@ -41,18 +42,18 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
                 ]
             }
         )
-        
+
         if existing_user:
             if existing_user.email == email:
-                print(f"Error: User with email {email} already exists!")
+                logger.error("User with email {} already exists!", email)
                 return False
             if existing_user.phone == phone:
-                print(f"Error: User with phone {phone} already exists!")
+                logger.error("User with phone {} already exists!", phone)
                 return False
-        
+
         # Hash the password
         hashed_password = get_password_hash(password)
-        
+
         # Create the admin user
         admin_user = await db.user.create(
             data={
@@ -65,19 +66,19 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
                 "isActive": True
             }
         )
-        
-        print("Admin user created successfully!")
-        print(f"Email: {admin_user.email}")
-        print(f"Phone: {admin_user.phone}")
-        print(f"Name: {admin_user.firstName} {admin_user.lastName}")
-        print(f"Role: {admin_user.role}")
-        print(f"User ID: {admin_user.id}")
-        print("\nYou can now use these credentials to login to the API!")
-        
+
+        logger.info("Admin user created successfully!")
+        logger.info("Email: {}", admin_user.email)
+        logger.info("Phone: {}", admin_user.phone)
+        logger.info("Name: {} {}", admin_user.firstName, admin_user.lastName)
+        logger.info("Role: {}", admin_user.role)
+        logger.info("User ID: {}", admin_user.id)
+        logger.info("You can now use these credentials to login to the API!")
+
         return True
-        
+
     except Exception as e:
-        print(f"Error creating admin user: {e}")
+        logger.error("Error creating admin user: {}", e)
         return False
     finally:
         # Disconnect from database
@@ -92,27 +93,26 @@ async def main():
     parser.add_argument("--first-name", default="Admin", help="Admin first name")
     parser.add_argument("--last-name", default="User", help="Admin last name")
     parser.add_argument("--password", default="admin123456", help="Admin password (min 6 chars)")
-    
+
     args = parser.parse_args()
-    
+
     # Validate password length
     if len(args.password) < 6:
-        print("Error: Password must be at least 6 characters long!")
+        logger.error("Password must be at least 6 characters long!")
         return
-    
-    print("Creating admin user for Caravane API...")
-    print(f"Email: {args.email}")
-    print(f"Phone: {args.phone}")
-    print(f"Name: {args.first_name} {args.last_name}")
-    print(f"Password: {'*' * len(args.password)}")
-    print()
-    
+
+    logger.info("Creating admin user for Caravane API...")
+    logger.info("Email: {}", args.email)
+    logger.info("Phone: {}", args.phone)
+    logger.info("Name: {} {}", args.first_name, args.last_name)
+    logger.info("Password: {}", '*' * len(args.password))
+
     # Confirm creation
-    confirm = input("Do you want to create this admin user? (y/N): ").lower().strip()
+    confirm = input("\nDo you want to create this admin user? (y/N): ").lower().strip()
     if confirm not in ['y', 'yes']:
-        print("Admin user creation cancelled.")
+        logger.info("Admin user creation cancelled.")
         return
-    
+
     # Create the admin user
     success = await create_admin_user(
         email=args.email,
@@ -121,23 +121,19 @@ async def main():
         last_name=args.last_name,
         password=args.password
     )
-    
+
     if success:
-        print("\nTesting Instructions:")
-        print("1. Start the API server: python main.py")
-        print("2. Go to: http://localhost:8001/docs")
-        print("3. Use the /api/auth/login endpoint with:")
-        print(f"   - Email: {args.email}")
-        print(f"   - Password: {args.password}")
-        print("4. Copy the access_token from the response")
-        print("5. Click 'Authorize' button and enter: Bearer <your_access_token>")
-        print("6. Now you can test all protected endpoints!")
+        logger.info("Testing Instructions:")
+        logger.info("1. Start the API server: python main.py")
+        logger.info("2. Go to: http://localhost:8001/docs")
+        logger.info("3. Use the /api/auth/login endpoint with email={} and your password", args.email)
+        logger.info("4. Copy the access_token and use it as: Bearer <token>")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
+        logger.info("Operation cancelled by user.")
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error("Unexpected error: {}", e)
