@@ -24,6 +24,11 @@ async def lifespan(app: FastAPI):
         print(f"Failed to connect to database: {e}")
         raise
     yield
+    try:
+        await disconnect_db()
+        print("Database disconnected successfully")
+    except Exception as e:
+        print(f"Error disconnecting from database: {e}")
 
 
 # Create FastAPI app
