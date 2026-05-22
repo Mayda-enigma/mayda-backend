@@ -138,24 +138,17 @@ async def get_anomalies(
     range: str | None = None,
     current_user=Depends(get_current_admin_user),
 ) -> list[Anomaly]:
-    """Retrieve anomalies. Currently mocked as the upstream service is pending."""
-    # Mocked response for hackathon
-    return [
-        Anomaly(
-            id="mock-1",
-            type="Inventory Spike",
-            severity="high",
-            details={"item": "flour", "usual": 10, "current": 100},
-            acknowledged=False,
-        ),
-        Anomaly(
-            id="mock-2",
-            type="Unusual Order Pattern",
-            severity="medium",
-            details={"time": "3AM", "size": "large"},
-            acknowledged=False,
-        ),
-    ]
+    """Proxy GET /anomalies to the anomaly-detection service."""
+    request_id = str(uuid.uuid4())
+    params = {"range": range} if range else None
+    result = await proxy_to_service(
+        base_url=settings.ANOMALY_SERVICE_URL,
+        path="/anomalies",
+        method="GET",
+        params=params,
+        request_id=request_id,
+    )
+    return result
 
 @router.post(
     "/anomalies/{anomaly_id}/ack",
@@ -167,6 +160,12 @@ async def ack_anomaly(
     anomaly_id: str,
     current_user=Depends(get_current_admin_user),
 ) -> AnomalyAckResponse:
-    """Acknowledge an anomaly. Currently mocked as the upstream service is pending."""
-    # Mocked response for hackathon
-    return AnomalyAckResponse(success=True)
+    """Proxy POST /anomalies/{id}/ack to the anomaly-detection service."""
+    request_id = str(uuid.uuid4())
+    result = await proxy_to_service(
+        base_url=settings.ANOMALY_SERVICE_URL,
+        path=f"/anomalies/{anomaly_id}/ack",
+        method="POST",
+        request_id=request_id,
+    )
+    return result
