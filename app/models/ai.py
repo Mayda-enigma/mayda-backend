@@ -18,3 +18,13 @@ class SearchRequest(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[Any]
+
+class ForecastRequest(BaseModel):
+    item: str
+    date: str
+    weather: str | None = None
+    specialEvent: str | None = None
+
+
+class ForecastResponse(BaseModel):
+    forecast: Any

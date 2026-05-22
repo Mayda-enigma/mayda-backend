@@ -8,8 +8,15 @@ import uuid
 from fastapi import APIRouter, Depends
 
 from app.core.config import settings
-from app.middleware.roles import get_current_user
-from app.models.ai import RecommendRequest, RecommendResponse, SearchRequest, SearchResponse
+from app.middleware.roles import get_current_user, get_current_staff_user
+from app.models.ai import (
+    RecommendRequest,
+    RecommendResponse,
+    SearchRequest,
+    SearchResponse,
+    ForecastRequest,
+    ForecastResponse,
+)
 from app.utils.ai_proxy import proxy_to_service
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -59,6 +66,27 @@ async def search(
     result = await proxy_to_service(
         base_url=settings.SEARCH_SERVICE_URL,
         path="/search",
+        method="POST",
+        json=body.model_dump(exclude_none=True),
+        request_id=request_id,
+    )
+    return result
+
+@router.post(
+    "/inventory/forecast",
+    response_model=ForecastResponse,
+    summary="AI-driven stock forecasting",
+    description="Staff-only endpoint to proxy AI-forecasted ingredient needs.",
+)
+async def forecast(
+    body: ForecastRequest,
+    current_user=Depends(get_current_staff_user),
+) -> ForecastResponse:
+    """Proxy POST /forecast to the inventory AI service."""
+    request_id = str(uuid.uuid4())
+    result = await proxy_to_service(
+        base_url=settings.INVENTORY_SERVICE_URL,
+        path="/forecast",
         method="POST",
         json=body.model_dump(exclude_none=True),
         request_id=request_id,
