@@ -28,3 +28,6 @@ class ForecastRequest(BaseModel):
 
 class ForecastResponse(BaseModel):
     forecast: Any
+
+class TranscribeResponse(BaseModel):
+    text: str

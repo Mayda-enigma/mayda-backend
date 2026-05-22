@@ -5,7 +5,7 @@ is forwarded to downstream services via the shared SERVICE_TOKEN header.
 """
 
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException
 
 from app.core.config import settings
 from app.middleware.roles import get_current_user, get_current_staff_user
@@ -16,8 +16,9 @@ from app.models.ai import (
     SearchResponse,
     ForecastRequest,
     ForecastResponse,
+    TranscribeResponse,
 )
-from app.utils.ai_proxy import proxy_to_service
+from app.utils.ai_proxy import proxy_to_service, proxy_multipart_to_service
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -89,6 +90,38 @@ async def forecast(
         path="/forecast",
         method="POST",
         json=body.model_dump(exclude_none=True),
+        request_id=request_id,
+    )
+    return result
+
+@router.post(
+    "/voice/transcribe",
+    response_model=TranscribeResponse,
+    summary="Transcribe audio",
+    description="Forwards a multipart audio upload to the transcription service.",
+)
+async def transcribe(
+    request: Request,
+    audio: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+) -> TranscribeResponse:
+    """Proxy POST /transcribe to the voice service."""
+    # Enforce 20MB limit
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Payload Too Large")
+
+    request_id = str(uuid.uuid4())
+    audio_content = await audio.read()
+    
+    files = {
+        "audio": (audio.filename, audio_content, audio.content_type)
+    }
+
+    result = await proxy_multipart_to_service(
+        base_url=settings.VOICE_SERVICE_URL,
+        path="/transcribe",
+        files=files,
         request_id=request_id,
     )
     return result
