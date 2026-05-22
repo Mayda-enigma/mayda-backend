@@ -67,22 +67,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Startup and shutdown events
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup."""
-    try:
-        await connect_db()
-        print("Database connected successfully")
-        
-        # Check if admin user exists, create one if not
-        await ensure_admin_user_exists()
-        
-    except Exception as e:
-        print(f"Failed to connect to database: {e}")
-        raise
-
-
 async def ensure_admin_user_exists():
     """Check if an admin user exists, create one if not."""
     try:
@@ -119,16 +103,6 @@ async def ensure_admin_user_exists():
         
     except Exception as e:
         print(f"Error creating admin user: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connection on shutdown."""
-    try:
-        await disconnect_db()
-        print("Database disconnected successfully")
-    except Exception as e:
-        print(f"Error disconnecting from database: {e}")
 
 
 # Include routers
