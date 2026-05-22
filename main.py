@@ -6,7 +6,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
-from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp
+from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 
