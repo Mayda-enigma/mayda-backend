@@ -43,3 +43,14 @@ async def recommend(
         request_id=request_id,
     )
     return result
+
+@router.post(
+    "/search",
+    summary="Search for dishes/menus via natural language",
+    description="Public endpoint (no auth required) to proxy search queries.",
+)
+async def search(
+    body: dict,
+) -> dict:
+    """Proxy POST /search to the search service."""
+    pass
