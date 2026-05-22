@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException
 
 from app.core.config import settings
-from app.middleware.roles import get_current_user, get_current_staff_user
+from app.middleware.roles import get_current_user, get_current_staff_user, get_current_admin_user
 from app.models.ai import (
     RecommendRequest,
     RecommendResponse,
@@ -17,6 +17,8 @@ from app.models.ai import (
     ForecastRequest,
     ForecastResponse,
     TranscribeResponse,
+    Anomaly,
+    AnomalyAckResponse,
 )
 from app.utils.ai_proxy import proxy_to_service, proxy_multipart_to_service
 
@@ -125,3 +127,46 @@ async def transcribe(
         request_id=request_id,
     )
     return result
+
+@router.get(
+    "/anomalies",
+    response_model=list[Anomaly],
+    summary="Get detected anomalies",
+    description="Admin-only endpoint to view AI-flagged anomalies.",
+)
+async def get_anomalies(
+    range: str | None = None,
+    current_user=Depends(get_current_admin_user),
+) -> list[Anomaly]:
+    """Retrieve anomalies. Currently mocked as the upstream service is pending."""
+    # Mocked response for hackathon
+    return [
+        Anomaly(
+            id="mock-1",
+            type="Inventory Spike",
+            severity="high",
+            details={"item": "flour", "usual": 10, "current": 100},
+            acknowledged=False,
+        ),
+        Anomaly(
+            id="mock-2",
+            type="Unusual Order Pattern",
+            severity="medium",
+            details={"time": "3AM", "size": "large"},
+            acknowledged=False,
+        ),
+    ]
+
+@router.post(
+    "/anomalies/{anomaly_id}/ack",
+    response_model=AnomalyAckResponse,
+    summary="Acknowledge an anomaly",
+    description="Admin-only endpoint to acknowledge an anomaly.",
+)
+async def ack_anomaly(
+    anomaly_id: str,
+    current_user=Depends(get_current_admin_user),
+) -> AnomalyAckResponse:
+    """Acknowledge an anomaly. Currently mocked as the upstream service is pending."""
+    # Mocked response for hackathon
+    return AnomalyAckResponse(success=True)
