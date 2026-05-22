@@ -20,6 +20,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+from app.middleware.request_id import RequestIdMiddleware
+
+# Request ID middleware (added before CORS)
+app.add_middleware(RequestIdMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
