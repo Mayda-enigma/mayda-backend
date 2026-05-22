@@ -53,4 +53,12 @@ async def search(
     body: dict,
 ) -> dict:
     """Proxy POST /search to the search service."""
-    pass
+    request_id = str(uuid.uuid4())
+    result = await proxy_to_service(
+        base_url=settings.SEARCH_SERVICE_URL,
+        path="/search",
+        method="POST",
+        json=body,
+        request_id=request_id,
+    )
+    return result
