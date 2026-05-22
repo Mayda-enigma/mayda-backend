@@ -30,4 +30,7 @@ class RequestIdMiddleware:
             request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
         )
 
+        # Attach to request state so route handlers can read it.
+        request.state.request_id = request_id
+
         await self.app(scope, receive, send)
