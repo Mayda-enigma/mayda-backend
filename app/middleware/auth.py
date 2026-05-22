@@ -26,7 +26,7 @@ class AuthMiddleware:
         try:
             db = get_db()
             user = await db.user.find_unique(
-                where={"id": int(user_id)},
+                where={"id": user_id},
                 include={
                     "restaurant": True,
                     "address": True
