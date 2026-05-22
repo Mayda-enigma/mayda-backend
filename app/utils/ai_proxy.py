@@ -11,6 +11,7 @@ async def proxy_to_service(
     method: str,
     json: dict | None = None,
     files: dict | None = None,
+    params: dict | None = None,
     request_id: str,
     timeout: float = 15,
 ) -> dict:
@@ -34,6 +35,7 @@ async def proxy_to_service(
                 headers=headers,
                 json=json,
                 files=files,
+                params=params,
             )
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Upstream service timed out")
