@@ -49,3 +49,46 @@ async def proxy_to_service(
         detail = response.text
 
     raise HTTPException(status_code=response.status_code, detail=detail)
+
+async def proxy_multipart_to_service(
+    base_url: str,
+    path: str,
+    *,
+    files: dict,
+    request_id: str,
+    timeout: float = 30,
+) -> dict:
+    """Forward a multipart request to an AI microservice and return the parsed JSON body.
+
+    Raises:
+        HTTPException(502) if the upstream returns a non-2xx response.
+        HTTPException(504) if the request times out.
+    """
+    url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    headers = {
+        "X-Service-Token": settings.SERVICE_TOKEN,
+        "X-Request-Id": request_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.request(
+                method="POST",
+                url=url,
+                headers=headers,
+                files=files,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Upstream service timed out")
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach upstream service: {exc}")
+
+    if response.is_success:
+        return response.json()
+
+    try:
+        detail = response.json()
+    except Exception:
+        detail = response.text
+
+    raise HTTPException(status_code=response.status_code, detail=detail)
