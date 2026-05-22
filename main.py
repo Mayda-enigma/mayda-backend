@@ -37,7 +37,8 @@ app = FastAPI(
     description="JWT Authentication with Role-Based Access Control",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Request ID middleware (added before CORS)
