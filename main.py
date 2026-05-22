@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,13 +13,32 @@ from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown lifecycle."""
+    try:
+        await connect_db()
+        print("Database connected successfully")
+        await ensure_admin_user_exists()
+    except Exception as e:
+        print(f"Failed to connect to database: {e}")
+        raise
+    yield
+    try:
+        await disconnect_db()
+        print("Database disconnected successfully")
+    except Exception as e:
+        print(f"Error disconnecting from database: {e}")
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Caravane Restaurant Management API",
     description="JWT Authentication with Role-Based Access Control",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Request ID middleware (added before CORS)
@@ -44,22 +65,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong"
         }
     )
-
-
-# Startup and shutdown events
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup."""
-    try:
-        await connect_db()
-        print("Database connected successfully")
-        
-        # Check if admin user exists, create one if not
-        await ensure_admin_user_exists()
-        
-    except Exception as e:
-        print(f"Failed to connect to database: {e}")
-        raise
 
 
 async def ensure_admin_user_exists():
@@ -98,16 +103,6 @@ async def ensure_admin_user_exists():
         
     except Exception as e:
         print(f"Error creating admin user: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connection on shutdown."""
-    try:
-        await disconnect_db()
-        print("Database disconnected successfully")
-    except Exception as e:
-        print(f"Error disconnecting from database: {e}")
 
 
 # Include routers
