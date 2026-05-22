@@ -43,7 +43,3 @@ async def get_current_admin_user(current_user = Depends(get_current_user)):
             detail="Admin access required"
         )
     return current_user
-
-
-# Instance of role middleware
-role_middleware = RoleMiddleware()
