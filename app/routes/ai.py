@@ -1,3 +1,9 @@
+"""AI proxy routes — forwards authenticated requests to Mayda AI microservices.
+
+All endpoints require a valid JWT. PII is stripped; only the internal user ID
+is forwarded to downstream services via the shared SERVICE_TOKEN header.
+"""
+
 import uuid
 from fastapi import APIRouter, Depends
 
