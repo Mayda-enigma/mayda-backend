@@ -110,5 +110,9 @@ def get_user_id_from_token(token: str) -> Optional[int]:
     """Extract user ID from JWT token."""
     payload = verify_token(token)
     if payload:
-        return payload.get("sub")
+        sub = payload.get("sub")
+        try:
+            return int(sub) if sub is not None else None
+        except (ValueError, TypeError):
+            return None
     return None
