@@ -30,7 +30,7 @@ prisma generate
 prisma migrate dev
 
 # Run
-uvicorn main:app --reload
+uvicorn main:app --reload --port 8001
 ```
 
 ## Quick Start (Docker)
@@ -40,7 +40,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The API is at `http://localhost:8000/docs` (Swagger UI).
+The API is at `http://localhost:8001/docs` (Swagger UI).
 
 ## Environment Variables
 
