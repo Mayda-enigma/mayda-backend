@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from app.models.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     InventoryStockUpdate, InventoryStockUpdateResponse, InventoryStatsResponse,
-    InventoryLowStockAlert, InventorySearchFilters, InventoryCategoryResponse,
+    InventoryLowStockAlert, InventoryCategoryResponse,
     InventorySupplierResponse
 )
 from app.core.database import get_db

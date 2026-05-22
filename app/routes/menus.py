@@ -1,10 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
+from typing import List
 from app.models.menu import (
     MenuCreate, MenuUpdate, MenuResponse,
     MenuCategoryCreate, MenuCategoryUpdate, MenuCategoryResponse,
-    DishCreate, DishUpdate, DishResponse, DishListResponse,
-    MenuWithCategories, MenuCategoryWithDishes
+    DishCreate, DishUpdate, DishResponse, MenuWithCategories
 )
 from app.core.database import get_db
 from app.middleware.roles import (

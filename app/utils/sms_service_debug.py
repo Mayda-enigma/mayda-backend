@@ -1,4 +1,3 @@
-import os
 import random
 import string
 from datetime import datetime, timedelta
@@ -19,7 +18,7 @@ class SMSService:
         self.phone_number = settings.TWILIO_PHONE_NUMBER
         self.environment = getattr(settings, 'ENVIRONMENT', 'development')
         
-        print(f"[DEBUG] SMS Service initializing...")
+        print("[DEBUG] SMS Service initializing...")
         print(f"[DEBUG] Environment: {self.environment}")
         print(f"[DEBUG] Account SID: {self.account_sid[:10]}..." if self.account_sid else "❌ No Account SID")
         print(f"[DEBUG] Phone Number: {self.phone_number}")
@@ -140,7 +139,7 @@ class SMSService:
             
             # Send SMS immediately
             message = f"Your Caravane verification code is: {otp_code}. Valid for 20 minutes."
-            print(f"[DEBUG] About to send SMS...")
+            print("[DEBUG] About to send SMS...")
             sms_result = self.send_sms(str(phone), message)
             print(f"[DEBUG] SMS send result: {sms_result}")
             

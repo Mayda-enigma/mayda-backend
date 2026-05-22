@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from app.models.reservation import (
     ReservationCreate, ReservationUpdate, ReservationResponse, ReservationListResponse,
     PublicReservationCreate, ReservationStatusUpdate, ReservationStatus,

@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status, Depends
 from functools import wraps
-from typing import List, Callable, Any
+from typing import List, Callable
 from app.middleware.auth import auth_middleware, security
 from app.models.user import UserRole
 

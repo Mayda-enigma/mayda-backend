@@ -169,7 +169,7 @@ async def inject_test_orders():
         print("   - GET /api/payments/show/{orderNumber}")
         print("   - GET /api/payments/receipt/{orderNumber}")
         
-        print(f"\n👤 Test User Credentials:")
+        print("\n👤 Test User Credentials:")
         print(f"Email: {test_user.email}")
         print(f"User ID: {test_user.id}")
         print("Password: (use your auth system to create a proper password)")

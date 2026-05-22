@@ -13,7 +13,7 @@ from app.utils.sms_service_debug import SMSService
 from app.core.config import settings
 from app.core.database import get_db
 from app.middleware.roles import (
-    get_current_user, get_current_admin_user, get_current_manager_or_admin
+    get_current_user, get_current_admin_user
 )
 
 

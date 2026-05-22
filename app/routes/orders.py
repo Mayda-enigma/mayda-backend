@@ -3,12 +3,12 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 from app.models.order import (
-    OrderCreate, OrderUpdate, OrderResponse, OrderListResponse,
+    OrderCreate, OrderResponse, OrderListResponse,
     PublicOrderCreate, OrderStatusUpdate, OrderStatus, OrderType, DeliveryOrderCreate
 )
 from app.core.database import get_db
 from app.middleware.roles import (
-    get_current_staff_user, get_current_user, get_current_user_optional
+    get_current_staff_user, get_current_user
 )
 
 

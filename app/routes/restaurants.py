@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
+from typing import List
 from app.models.restaurant import (
     RestaurantCreate, RestaurantUpdate, RestaurantResponse, 
     RestaurantListResponse

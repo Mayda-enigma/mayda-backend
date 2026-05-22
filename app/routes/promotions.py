@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from app.models.promotion import (
     PromotionCreate, PromotionUpdate, PromotionResponse, PromotionListResponse,
     PromotionUsageRequest, PromotionUsageResponse, ActivePromotionsResponse,
@@ -8,7 +8,7 @@ from app.models.promotion import (
 )
 from app.core.database import get_db
 from app.middleware.roles import (
-    get_current_staff_user, get_current_user
+    get_current_staff_user
 )
 
 
@@ -520,7 +520,7 @@ async def update_promotion(
     
     try:
         # Update promotion
-        updated_promotion = await db.promotion.update(
+        await db.promotion.update(
             where={"id": promotion_id},
             data=update_data
         )

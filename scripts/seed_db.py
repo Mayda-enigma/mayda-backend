@@ -71,9 +71,9 @@ async def main():
             'isActive': True,
             'password': '$2b$12$KVtnpBREulpi3vjhE9SveOyGxTADCAzYOqm/5YuFL/rZy8m/5P0M6'  # hashed 'admin123'
         })
-        print(f"✅ Created admin user")
+        print("✅ Created admin user")
     else:
-        print(f"ℹ️  Admin user already exists")
+        print("ℹ️  Admin user already exists")
     users.append(admin)
     
     # Create Managers for each restaurant
@@ -353,7 +353,7 @@ async def main():
                     # Find the inventory item
                     inventory_item = next((inv for inv in restaurant_inventory if inv.itemName == inventory_name), None)
                     if inventory_item:
-                        ingredient = await db.ingredient.create({
+                        await db.ingredient.create({
                             'dishId': dish.id,
                             'InventoryId': inventory_item.id,
                             'quantity': quantity

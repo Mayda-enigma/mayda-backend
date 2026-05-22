@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import timedelta
 from app.models.otp import (
-    OtpSendRequest, OtpSendResponse, OtpVerifyRequest, OtpVerifyResponse,
+    OtpSendResponse, OtpVerifyResponse,
     PaymentOtpRequest, PaymentOtpVerifyRequest, StaffLoginRequest, StaffOtpVerifyRequest
 )
 from app.models.user import UserRole
@@ -119,7 +119,7 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest):
         )
         
         # Create refresh token
-        refresh_token = create_refresh_token(user.id, db)
+        create_refresh_token(user.id, db)
         
         # Return user info and token
         user_info = {
@@ -267,7 +267,7 @@ async def verify_payment_otp(
             )
         
         # Update order payment status
-        updated_order = await db.order.update(
+        await db.order.update(
             where={"id": request.orderId},
             data={"paymentStatus": "PAID"}
         )
