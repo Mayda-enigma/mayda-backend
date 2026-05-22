@@ -27,11 +27,6 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
         await connect_db()
         db = get_db()
 
-        existing_admin = await db.user.find_first(where={"role": UserRole.ADMIN.value})
-        if existing_admin:
-            print(f"Error: Admin user already exists ({existing_admin.email}).")
-            return False
-
         existing_user = await db.user.find_first(where={"OR": [{"email": email}, {"phone": phone}]})
         if existing_user:
             if existing_user.email == email:
@@ -40,6 +35,11 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
             if existing_user.phone == phone:
                 print(f"Error: User with phone {phone} already exists.")
                 return False
+
+        existing_admin = await db.user.find_first(where={"role": UserRole.ADMIN.value})
+        if existing_admin:
+            print(f"Error: Admin user already exists ({existing_admin.email}).")
+            return False
 
         hashed_password = get_password_hash(password)
         admin_user = await db.user.create(
