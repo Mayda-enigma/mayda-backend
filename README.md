@@ -42,6 +42,18 @@ docker compose up -d
 
 The API is at `http://localhost:8001/docs` (Swagger UI).
 
+## First-time setup
+
+Admin user creation is now explicit and must be run manually:
+
+```bash
+python -m app.cli create-admin \
+  --email admin@caravane.com \
+  --password "<strong-password>"
+```
+
+The command refuses to create a new admin if one already exists.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
