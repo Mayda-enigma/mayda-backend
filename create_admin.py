@@ -125,7 +125,7 @@ async def main():
     if success:
         print("\nTesting Instructions:")
         print("1. Start the API server: python main.py")
-        print("2. Go to: http://localhost:8000/docs")
+        print("2. Go to: http://localhost:8001/docs")
         print("3. Use the /api/auth/login endpoint with:")
         print(f"   - Email: {args.email}")
         print(f"   - Password: {args.password}")
