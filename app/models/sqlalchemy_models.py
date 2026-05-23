@@ -4,7 +4,8 @@ from typing import Optional, List as TypingList
 
 from sqlalchemy import (
     Column, Integer, BigInteger, Float, String, Text, Boolean, DateTime,
-    ForeignKey, UniqueConstraint, Index, JSON, Enum as SAEnum, ARRAY, Table
+    ForeignKey, UniqueConstraint, Index, JSON, Enum as SAEnum, ARRAY,
+    Table as SATable
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -157,7 +158,7 @@ class User(Base):
     phone: int = Column(BigInteger, unique=True, nullable=False)
     firstName: str = Column(String, nullable=False)
     lastName: str = Column(String, nullable=False)
-    role: UserRole = Column(SAEnum(UserRole), nullable=False, server_default="CLIENT")
+    role: UserRole = Column(SAEnum(UserRole, name="UserRole", create_type=False), nullable=False, server_default="CLIENT")
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
@@ -271,7 +272,7 @@ class Table(Base):
     number: str = Column(String, nullable=False)
     capacity: int = Column(Integer, nullable=False)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
-    status: TableStatus = Column(SAEnum(TableStatus), nullable=False, server_default="AVAILABLE")
+    status: TableStatus = Column(SAEnum(TableStatus, name="TableStatus", create_type=False), nullable=False, server_default="AVAILABLE")
     qrCode: Optional[str] = Column(String, nullable=True)
     nfcTag: Optional[str] = Column(String, nullable=True)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -315,7 +316,7 @@ class Reservation(Base):
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
     reservationStart: datetime = Column(DateTime(timezone=True), nullable=False)
     reservationEnd: datetime = Column(DateTime(timezone=True), nullable=False)
-    status: ReservationStatus = Column(SAEnum(ReservationStatus), nullable=False, server_default="PENDING")
+    status: ReservationStatus = Column(SAEnum(ReservationStatus, name="ReservationStatus", create_type=False), nullable=False, server_default="PENDING")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
 
@@ -348,8 +349,8 @@ class Order(Base):
     userId: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
     tableId: Optional[int] = Column(Integer, ForeignKey("tables.id"), nullable=True)
-    type: OrderType = Column(SAEnum(OrderType), nullable=False, server_default="DINE_IN")
-    status: OrderStatus = Column(SAEnum(OrderStatus), nullable=False, server_default="PENDING")
+    type: OrderType = Column(SAEnum(OrderType, name="OrderType", create_type=False), nullable=False, server_default="DINE_IN")
+    status: OrderStatus = Column(SAEnum(OrderStatus, name="OrderStatus", create_type=False), nullable=False, server_default="PENDING")
     subtotal: float = Column(Float, nullable=False)
     deliveryFee: float = Column(Float, nullable=False, server_default="0")
     discount: float = Column(Float, nullable=False, server_default="0")
@@ -357,7 +358,7 @@ class Order(Base):
     deliveryAddressId: Optional[int] = Column(Integer, ForeignKey("addresses.id"), nullable=True)
     estimatedDeliveryTime: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     actualDeliveryTime: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    paymentStatus: PaymentStatus = Column(SAEnum(PaymentStatus), nullable=False, server_default="PENDING")
+    paymentStatus: PaymentStatus = Column(SAEnum(PaymentStatus, name="PaymentStatus", create_type=False), nullable=False, server_default="PENDING")
     paymentMethod: Optional[str] = Column(String, nullable=True)
     notes: Optional[str] = Column(String, nullable=True)
     orderTime: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -374,7 +375,7 @@ class Order(Base):
     table = relationship("Table", back_populates="orders")
     deliveryAddress = relationship("Address", back_populates="orders", foreign_keys=[deliveryAddressId])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-    payment = relationship("Payments", back_populates="order", uselist=False, foreign_keys="Order.paymentId")
+    payment = relationship("Payments", uselist=False, foreign_keys="Order.paymentId", primaryjoin="Order.paymentId == Payments.id")
     loyaltyTransactions = relationship("LoyaltyTransaction", back_populates="order")
 
 
@@ -386,7 +387,7 @@ class Payments(Base):
     orderId: int = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    order = relationship("Order", back_populates="payment", foreign_keys="Payments.orderId")
+    order = relationship("Order", uselist=False, foreign_keys="Payments.orderId", primaryjoin="Payments.orderId == Order.id")
 
 
 class Notification(Base):
@@ -397,7 +398,7 @@ class Notification(Base):
     type: str = Column(String, nullable=False)
     title: str = Column(String, nullable=False)
     body: str = Column(String, nullable=False)
-    metadata = Column(JSON, nullable=True)
+    _metadata: Optional[dict] = Column("metadata", JSON, nullable=True)
     isRead: bool = Column(Boolean, nullable=False, server_default="false")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
@@ -464,7 +465,7 @@ class OtpCode(Base):
     id: int = Column(Integer, primary_key=True)
     userId: int = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     code: str = Column(String, nullable=False)
-    purpose: OtpPurpose = Column(SAEnum(OtpPurpose), nullable=False)
+    purpose: OtpPurpose = Column(SAEnum(OtpPurpose, name="OtpPurpose", create_type=False), nullable=False)
     isUsed: bool = Column(Boolean, nullable=False, server_default="false")
     expiresAt: datetime = Column(DateTime(timezone=True), nullable=False)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -473,7 +474,7 @@ class OtpCode(Base):
 
 
 # Association table for many-to-many relationship between promotions and dishes
-promotion_dishes = Table(
+promotion_dishes = SATable(
     "promotion_dishes",
     Base.metadata,
     Column("promotionId", Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True),
@@ -489,8 +490,8 @@ class Promotion(Base):
     title: str = Column(String, nullable=False)
     description: str = Column(String, nullable=False)
     image: Optional[str] = Column(String, nullable=True)
-    type: PromotionType = Column(SAEnum(PromotionType), nullable=False)
-    discountType: DiscountType = Column(SAEnum(DiscountType), nullable=False)
+    type: PromotionType = Column(SAEnum(PromotionType, name="PromotionType", create_type=False), nullable=False)
+    discountType: DiscountType = Column(SAEnum(DiscountType, name="DiscountType", create_type=False), nullable=False)
     discountValue: float = Column(Float, nullable=False)
     minOrderAmount: Optional[float] = Column(Float, nullable=True)
     startDate: datetime = Column(DateTime(timezone=True), nullable=False)

@@ -44,7 +44,7 @@ async def create_restaurant_event_notifications(
                 type=notification_type,
                 title=title,
                 body=body,
-                metadata=metadata,
+                _metadata=metadata,
             )
             db.add(notification)
 

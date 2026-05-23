@@ -1,10 +1,15 @@
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models.sqlalchemy_models import Base
 import app.models.sqlalchemy_models  # noqa: F401
@@ -12,6 +17,14 @@ import app.models.sqlalchemy_models  # noqa: F401
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+db_url = os.environ.get("DATABASE_URL", "")
+if db_url:
+    if not db_url.startswith("postgresql+asyncpg://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if "?" in db_url:
+        db_url = db_url.split("?")[0]
+    config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata
 

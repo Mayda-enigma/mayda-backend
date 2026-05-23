@@ -28,7 +28,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - DATABASE_URL=postgresql://caravane_user:caravane_password@db:5432/caravane_db?schema=public
+      - DATABASE_URL=postgresql://caravane_user:caravane_password@db:5432/caravane_db
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}

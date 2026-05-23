@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     @property
     def async_database_url(self) -> str:
         """Return DATABASE_URL with async driver for SQLAlchemy."""
-        return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if "?" in url:
+            url = url.split("?")[0]
+        return url
 
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = []
