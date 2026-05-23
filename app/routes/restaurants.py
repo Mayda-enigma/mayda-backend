@@ -348,9 +348,9 @@ async def invite_restaurant_staff(
         f"You have been invited to join {restaurant.name} as {staff_data.role.value}. "
         f"Temporary password: {temporary_password}. Use staff login to access Caravane."
     )
-    sms_sent = active_sms_service.send_sms(str(staff_data.phone), invite_message)
+    sms_result = active_sms_service.send_sms(str(staff_data.phone), invite_message)
 
-    if not sms_sent:
+    if not sms_result.get("success", False):
         await db.user.delete(where={"id": staff_user.id})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

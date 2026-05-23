@@ -53,9 +53,9 @@ async def send_staff_otp(request: StaffLoginRequest, db: "Prisma" = Depends(get_
             )
         
         # Send OTP
-        otp_code = await sms_service.send_otp(user.id, str(user.phone), "STAFF_AUTH")
+        otp_result = await sms_service.send_otp(user.id, str(user.phone), "STAFF_AUTH")
         
-        if otp_code:
+        if otp_result.get("success", False):
             return OtpSendResponse(
                 success=True,
                 message="OTP sent successfully to your phone number"
@@ -196,9 +196,9 @@ async def send_payment_otp(
         
         # Send OTP to order owner's phone
         target_user = order.user if order.user else current_user
-        otp_code = await sms_service.send_otp(target_user.id, str(target_user.phone), "PAYMENT_CONFIRMATION")
+        otp_result = await sms_service.send_otp(target_user.id, str(target_user.phone), "PAYMENT_CONFIRMATION")
         
-        if otp_code:
+        if otp_result.get("success", False):
             return OtpSendResponse(
                 success=True,
                 message="Payment confirmation OTP sent to order owner's phone"
