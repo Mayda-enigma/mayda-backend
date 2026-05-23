@@ -18,6 +18,7 @@ from app.utils.sms_service_debug import SMSService
 
 
 router = APIRouter(prefix="/restaurants", tags=["Restaurants"])
+STAFF_ROLES = [UserRole.WAITER.value, UserRole.CHEF.value, UserRole.MANAGER.value]
 
 
 @router.get("/", response_model=List[RestaurantListResponse])
@@ -264,7 +265,7 @@ async def get_restaurant_staff(
     staff = await db.user.find_many(
         where={
             "restaurantId": restaurant_id,
-            "role": {"in": ["WAITER", "CHEF", "MANAGER"]}
+            "role": {"in": STAFF_ROLES}
         },
         order={"role": "asc"}
     )
@@ -285,7 +286,7 @@ async def invite_restaurant_staff(
     db: "Prisma" = Depends(get_db_session),
 ):
     """Invite restaurant staff by creating account and sending SMS."""
-    if staff_data.role.value not in [UserRole.WAITER.value, UserRole.CHEF.value, UserRole.MANAGER.value]:
+    if staff_data.role.value not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Role must be WAITER, CHEF, or MANAGER"
@@ -298,16 +299,17 @@ async def invite_restaurant_staff(
             detail="Restaurant not found"
         )
 
-    existing_user = await db.user.find_first(where={"phone": staff_data.phone})
-    if not existing_user and staff_data.email:
-        existing_user = await db.user.find_first(where={"email": staff_data.email})
+    existing_user_filters = [{"phone": staff_data.phone}]
+    if staff_data.email:
+        existing_user_filters.append({"email": staff_data.email})
+    existing_user = await db.user.find_first(where={"OR": existing_user_filters})
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this email or phone already exists"
         )
 
-    temporary_password = secrets.token_urlsafe(9)
+    temporary_password = secrets.token_urlsafe(16)
     user = await db.user.create(
         data={
             "email": staff_data.email,
@@ -365,7 +367,7 @@ async def update_restaurant_staff(
 
     update_data = {}
     if staff_update.role is not None:
-        if staff_update.role.value not in [UserRole.WAITER.value, UserRole.CHEF.value, UserRole.MANAGER.value]:
+        if staff_update.role.value not in STAFF_ROLES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Role must be WAITER, CHEF, or MANAGER"
@@ -406,7 +408,7 @@ async def soft_delete_restaurant_staff(
             detail="Cross-restaurant staff removal is not allowed"
         )
 
-    if staff_user.role not in [UserRole.WAITER.value, UserRole.CHEF.value, UserRole.MANAGER.value]:
+    if staff_user.role not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only staff users can be deleted from this endpoint"
