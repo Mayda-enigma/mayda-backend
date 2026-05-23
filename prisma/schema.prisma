@@ -20,6 +20,7 @@ model User {
   specialinfo Json?
   restaurantId Int?
   restaurant   Restaurant? @relation("RestaurantStaff", fields: [restaurantId], references: [id])
+  tableSessions TableSession[] @relation("TableWaiterSessions")
   orders       Order[]
   reviews      Review[]
   loyaltyCard  LoyaltyCard?
@@ -147,14 +148,36 @@ model Table {
   number       String     
   capacity     Int
   isActive     Boolean    @default(true)
+  status       TableStatus @default(AVAILABLE)
   qrCode       String?    
   nfcTag       String?    
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   reservations Reservation[]
   orders       Order[]
+  sessions     TableSession[]
   @@unique([restaurantId, number])
   @@map("tables")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+}
+
+model TableSession {
+  id        Int      @id @default(autoincrement())
+  tableId    Int
+  table      Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  waiterId   Int
+  waiter     User     @relation("TableWaiterSessions", fields: [waiterId], references: [id], onDelete: Cascade)
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  isActive   Boolean  @default(true)
+
+  @@index([tableId, isActive])
+  @@index([waiterId, isActive])
+  @@map("table_sessions")
 }
 
 model Reservation {
