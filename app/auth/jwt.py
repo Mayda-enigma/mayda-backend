@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -22,11 +22,13 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
@@ -35,11 +37,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT refresh token."""
     to_encode = data.copy()
+    if "sub" in to_encode:
+        to_encode["sub"] = str(to_encode["sub"])
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    
+        expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
@@ -59,7 +63,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
         if exp is None:
             return None
             
-        if datetime.utcnow() > datetime.fromtimestamp(exp):
+        if datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc):
             return None
             
         return payload
@@ -69,7 +73,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
 
 def create_temp_token(user_id: int, purpose: str = "2fa") -> str:
     """Create a temporary token for 2FA verification (5 minutes)."""
-    expire = datetime.utcnow() + timedelta(minutes=5)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
     to_encode = {
         "sub": str(user_id),
         "exp": expire,
@@ -94,7 +98,7 @@ def verify_temp_token(token: str, purpose: str = "2fa") -> Optional[dict]:
         if exp is None:
             return None
             
-        if datetime.utcnow() > datetime.fromtimestamp(exp):
+        if datetime.now(timezone.utc) > datetime.fromtimestamp(exp, tz=timezone.utc):
             return None
             
         return payload
@@ -106,5 +110,9 @@ def get_user_id_from_token(token: str) -> Optional[int]:
     """Extract user ID from JWT token."""
     payload = verify_token(token)
     if payload:
-        return payload.get("sub")
+        sub = payload.get("sub")
+        try:
+            return int(sub) if sub is not None else None
+        except (ValueError, TypeError):
+            return None
     return None

@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.core.database import connect_db, disconnect_db
 from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
+from app.utils.logging import logger
 
 
 @asynccontextmanager
@@ -16,16 +18,17 @@ async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     try:
         await connect_db()
-        print("Database connected successfully")
+        logger.info("Database connected successfully")
+        await ensure_admin_user_exists()
     except Exception as e:
-        print(f"Failed to connect to database: {e}")
+        logger.error("Failed to connect to database: {}", e)
         raise
     yield
     try:
         await disconnect_db()
-        print("Database disconnected successfully")
+        logger.info("Database disconnected successfully")
     except Exception as e:
-        print(f"Error disconnecting from database: {e}")
+        logger.error("Error disconnecting from database: {}", e)
 
 
 # Create FastAPI app
@@ -40,6 +43,9 @@ app = FastAPI(
 
 # Request ID middleware (added before CORS)
 app.add_middleware(RequestIdMiddleware)
+
+# Request logging middleware (runs after request_id is set)
+app.add_middleware(RequestLoggingMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -62,6 +68,41 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong"
         }
     )
+
+
+async def ensure_admin_user_exists():
+    """Check if an admin user exists, create one if not."""
+    try:
+        db = get_db()
+        
+        # Check if any admin user exists
+        admin_user = await db.user.find_first(
+            where={"role": UserRole.ADMIN.value}
+        )
+        
+        if admin_user:
+            logger.info("Admin user already exists: {}", admin_user.email)
+            return
+
+        # Create default admin user
+        hashed_password = get_password_hash("admin123456")
+
+        admin_user = await db.user.create(
+            data={
+                "email": "admin@caravane.com",
+                "phone": 1234567890,
+                "firstName": "Admin",
+                "lastName": "User",
+                "password": hashed_password,
+                "role": UserRole.ADMIN.value,
+                "isActive": True
+            }
+        )
+
+        logger.info("Default admin user created. Email: {}. Please change credentials!", admin_user.email)
+
+    except Exception as e:
+        logger.error("Error creating admin user: {}", e)
 
 
 # Include routers

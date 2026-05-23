@@ -96,6 +96,31 @@ Options:
 
 The command refuses to run if a user with the same email or phone already exists.
 No admin is created automatically on startup — creation is always explicit.
+## Role-Based Access Control (RBAC)
+
+RBAC is enforced exclusively through **FastAPI `Depends` functions** declared in `app/middleware/roles.py`. Use these dependencies in route signatures — never implement role checks inline or via decorators.
+
+| Dependency | Allowed roles |
+|---|---|
+| `get_current_user` | Any authenticated user |
+| `get_current_user_optional` | Any user (unauthenticated returns `None`) |
+| `get_current_staff_user` | `WAITER`, `CHEF`, `MANAGER`, `ADMIN` |
+| `get_current_manager_or_admin` | `MANAGER`, `ADMIN` |
+| `get_current_admin_user` | `ADMIN` only |
+
+Example:
+
+```python
+from app.middleware.roles import get_current_admin_user
+
+@router.delete("/{item_id}")
+async def delete_item(
+    item_id: int,
+    current_user=Depends(get_current_admin_user),
+    db=Depends(get_db_session),
+):
+    ...
+```
 
 ## Project Structure
 
