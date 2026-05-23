@@ -1,11 +1,11 @@
 # Mayda Backend — Restaurant Management API
 
-FastAPI + Prisma + PostgreSQL backend for the Mayda restaurant management platform.
+FastAPI + SQLAlchemy + PostgreSQL backend for the Mayda restaurant management platform.
 
 ## Tech Stack
 
 - **Framework:** FastAPI (Python 3.10+)
-- **Database:** PostgreSQL 15 with Prisma ORM
+- **Database:** PostgreSQL 15 with SQLAlchemy
 - **Auth:** JWT (python-jose) + 2FA SMS (Twilio)
 - **Validation:** Pydantic v2
 - **Payments:** Guidini Pay
@@ -25,9 +25,8 @@ source venv/bin/activate
 # Dependencies
 pip install -r requirements.txt
 
-# Prisma client & migrations
-prisma generate
-prisma migrate dev
+# Apply database migrations
+alembic upgrade head
 
 # Run
 uvicorn main:app --reload --port 8001
@@ -63,14 +62,11 @@ Copy `.env.example` to `.env` and fill in the values.
 ## Database
 
 ```bash
-# Generate Prisma client (after schema changes)
-prisma generate
-
 # Create a new migration
-prisma migrate dev --name <name>
+alembic revision --autogenerate -m "<name>"
 
 # Apply migrations in production
-prisma migrate deploy
+alembic upgrade head
 ```
 
 ## First-time Setup
@@ -131,9 +127,10 @@ async def delete_item(
 │   ├── routes/         # API route handlers
 │   ├── auth/           # JWT & authentication logic
 │   └── services/       # Business logic
-├── prisma/
-│   ├── schema.prisma   # Database schema
-│   └── migrations/     # Migration history
+├── alembic/
+│   ├── env.py         # Alembic config
+│   └── versions/      # Migration history
+├── alembic.ini         # Alembic config
 ├── main.py             # FastAPI application entrypoint
 ├── requirements.txt
 ├── Dockerfile

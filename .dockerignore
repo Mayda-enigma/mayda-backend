@@ -83,8 +83,8 @@ tests/
 test_*
 *_test.py
 
-# Prisma cache (regenerated at build time)
-.prisma/
+# Alembic environment (included explicitly)
+.alembic/
 
 # Logs
 *.log
