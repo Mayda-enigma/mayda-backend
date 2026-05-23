@@ -7,8 +7,7 @@ import uvicorn
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
-
-from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics
+from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics,users
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
@@ -126,6 +125,7 @@ app.include_router(inventory.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 
 

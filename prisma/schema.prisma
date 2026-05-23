@@ -28,6 +28,7 @@ model User {
   reservations Reservation[]
   notifications Notification[]
   refreshTokens RefreshToken[]
+  pushTokens   PushToken[]
   otpCodes     OtpCode[]
   @@map("users")
 }
@@ -43,6 +44,18 @@ model RefreshToken {
   
   @@map("refresh_tokens")
 }
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@map("push_tokens")
+}
+
 model Address {
   id           Int  @id @default(autoincrement())
   userId       Int? @unique 
