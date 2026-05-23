@@ -27,6 +27,7 @@ model User {
   reservations Reservation[]
   refreshTokens RefreshToken[]
   otpCodes     OtpCode[]
+  notifications Notification[]
   @@map("users")
 }
 
@@ -385,6 +386,20 @@ model OtpCode {
   createdAt DateTime @default(now())
   
   @@map("otp_codes")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  @@index([userId, isRead])
+  @@map("notifications")
 }
 
 enum OtpPurpose {
