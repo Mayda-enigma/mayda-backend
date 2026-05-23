@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from typing import Any
+
+from pydantic import BaseModel
 
 
 class RecommendRequest(BaseModel):
@@ -10,6 +11,7 @@ class RecommendRequest(BaseModel):
 class RecommendResponse(BaseModel):
     recommendations: list[Any]
 
+
 class SearchRequest(BaseModel):
     query: str
     restaurantId: str | None = None
@@ -18,6 +20,7 @@ class SearchRequest(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[Any]
+
 
 class ForecastRequest(BaseModel):
     item: str
@@ -29,8 +32,10 @@ class ForecastRequest(BaseModel):
 class ForecastResponse(BaseModel):
     forecast: Any
 
+
 class TranscribeResponse(BaseModel):
     text: str
+
 
 class Anomaly(BaseModel):
     id: str
@@ -38,6 +43,7 @@ class Anomaly(BaseModel):
     severity: str
     details: dict | None = None
     acknowledged: bool = False
+
 
 class AnomalyAckResponse(BaseModel):
     success: bool

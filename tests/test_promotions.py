@@ -1,10 +1,11 @@
 """Tests for the promotions route module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock
 
-from tests.conftest import _mock_result, _make_mock_restaurant, _MockModel
+import pytest
+
+from tests.conftest import _make_mock_restaurant, _mock_result, _MockModel
 
 
 @pytest.mark.asyncio
@@ -24,9 +25,7 @@ async def test_get_active_promotions(client):
     ac, mock_db = client
     mock_db.execute.return_value = _mock_result(scalars_val=[])
 
-    resp = await ac.get(
-        "/api/promotions/active?restaurant_id=1&promotion_type=DISCOUNT"
-    )
+    resp = await ac.get("/api/promotions/active?restaurant_id=1&promotion_type=DISCOUNT")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -60,6 +59,7 @@ async def test_create_promotion(staff_client, mock_staff_user, staff_token):
     complete_promotion.dishes = []
 
     from datetime import timedelta
+
     future_start = datetime.now() + timedelta(days=1)
     future_end = datetime.now() + timedelta(days=30)
 

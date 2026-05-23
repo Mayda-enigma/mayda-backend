@@ -11,8 +11,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.models.sqlalchemy_models import Base
 import app.models.sqlalchemy_models  # noqa: F401
+from app.models.sqlalchemy_models import Base
 
 config = context.config
 if config.config_file_name is not None:

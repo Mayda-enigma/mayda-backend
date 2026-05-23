@@ -1,13 +1,27 @@
 import enum
-from datetime import datetime, timezone
-from typing import Optional, List as TypingList
+from datetime import datetime
 
 from sqlalchemy import (
-    Column, Integer, BigInteger, Float, String, Text, Boolean, DateTime,
-    ForeignKey, UniqueConstraint, Index, JSON, Enum as SAEnum, ARRAY,
-    Table as SATable
+    ARRAY,
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
+from sqlalchemy import (
+    Enum as SAEnum,
+)
+from sqlalchemy import (
+    Table as SATable,
+)
+from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
 
@@ -16,6 +30,7 @@ class Base(DeclarativeBase):
 
 
 # ── Enums ────────────────────────────────────────────────────────────────────
+
 
 class UserRole(str, enum.Enum):
     CLIENT = "CLIENT"
@@ -91,6 +106,7 @@ class OtpPurpose(str, enum.Enum):
 
 # ── Models ───────────────────────────────────────────────────────────────────
 
+
 class PlatformSettings(Base):
     __tablename__ = "platform_settings"
 
@@ -99,7 +115,12 @@ class PlatformSettings(Base):
     timezone: str = Column(String, nullable=False, server_default="UTC")
     defaultOperatingHours = Column(JSON, nullable=False, server_default=func.cast("{}", JSON))
     featureFlags = Column(JSON, nullable=False, server_default=func.cast("{}", JSON))
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
 
 class Restaurant(Base):
@@ -107,19 +128,29 @@ class Restaurant(Base):
 
     id: int = Column(Integer, primary_key=True)
     name: str = Column(String, nullable=False)
-    description: Optional[str] = Column(String, nullable=True)
+    description: str | None = Column(String, nullable=True)
     phone: str = Column(String, nullable=False)
-    email: Optional[str] = Column(String, nullable=True)
-    website: Optional[str] = Column(String, nullable=True)
+    email: str | None = Column(String, nullable=True)
+    website: str | None = Column(String, nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     operatingHours = Column(JSON, nullable=False)
-    logo: Optional[str] = Column(String, nullable=True)
-    coverImage: Optional[str] = Column(String, nullable=True)
-    gallery: TypingList[str] = Column(ARRAY(String), nullable=False, server_default="{}")
+    logo: str | None = Column(String, nullable=True)
+    coverImage: str | None = Column(String, nullable=True)
+    gallery: list[str] = Column(ARRAY(String), nullable=False, server_default="{}")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
-    address = relationship("Address", back_populates="restaurant", uselist=False, foreign_keys="Address.restaurantId")
+    address = relationship(
+        "Address",
+        back_populates="restaurant",
+        uselist=False,
+        foreign_keys="Address.restaurantId",
+    )
     staff = relationship("User", back_populates="restaurant", foreign_keys="User.restaurantId")
     menus = relationship("Menu", back_populates="restaurant")
     tables = relationship("Table", back_populates="restaurant")
@@ -135,43 +166,71 @@ class Address(Base):
     __tablename__ = "addresses"
 
     id: int = Column(Integer, primary_key=True)
-    userId: Optional[int] = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=True)
-    restaurantId: Optional[int] = Column(Integer, ForeignKey("restaurants.id", ondelete="CASCADE"), unique=True, nullable=True)
+    userId: int | None = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=True)
+    restaurantId: int | None = Column(
+        Integer,
+        ForeignKey("restaurants.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=True,
+    )
     street: str = Column(String, nullable=False)
     city: str = Column(String, nullable=False)
-    latitude: Optional[float] = Column(Float, nullable=True)
-    longitude: Optional[float] = Column(Float, nullable=True)
+    latitude: float | None = Column(Float, nullable=True)
+    longitude: float | None = Column(Float, nullable=True)
     isDefault: bool = Column(Boolean, nullable=False, server_default="false")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     user = relationship("User", back_populates="address", foreign_keys=[userId])
     restaurant = relationship("Restaurant", back_populates="address", foreign_keys=[restaurantId])
-    orders = relationship("Order", back_populates="deliveryAddress", foreign_keys="Order.deliveryAddressId")
+    orders = relationship(
+        "Order",
+        back_populates="deliveryAddress",
+        foreign_keys="Order.deliveryAddressId",
+    )
 
 
 class User(Base):
     __tablename__ = "users"
 
     id: int = Column(Integer, primary_key=True)
-    email: Optional[str] = Column(String, unique=True, nullable=True)
+    email: str | None = Column(String, unique=True, nullable=True)
     phone: int = Column(BigInteger, unique=True, nullable=False)
     firstName: str = Column(String, nullable=False)
     lastName: str = Column(String, nullable=False)
-    role: UserRole = Column(SAEnum(UserRole, name="UserRole", create_type=False), nullable=False, server_default="CLIENT")
+    role: UserRole = Column(
+        SAEnum(UserRole, name="UserRole", create_type=False),
+        nullable=False,
+        server_default="CLIENT",
+    )
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
     password: str = Column(String, nullable=False)
-    embeddedPref: Optional[str] = Column(String, nullable=True)
+    embeddedPref: str | None = Column(String, nullable=True)
     specialinfo = Column(JSON, nullable=True)
-    restaurantId: Optional[int] = Column(Integer, ForeignKey("restaurants.id"), nullable=True)
+    restaurantId: int | None = Column(Integer, ForeignKey("restaurants.id"), nullable=True)
 
     restaurant = relationship("Restaurant", back_populates="staff", foreign_keys=[restaurantId])
     address = relationship("Address", back_populates="user", uselist=False, foreign_keys="Address.userId")
     refreshTokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     pushTokens = relationship("PushToken", back_populates="user", cascade="all, delete-orphan")
-    tableSessions = relationship("TableSession", back_populates="waiter", foreign_keys="TableSession.waiterId", cascade="all, delete-orphan")
+    tableSessions = relationship(
+        "TableSession",
+        back_populates="waiter",
+        foreign_keys="TableSession.waiterId",
+        cascade="all, delete-orphan",
+    )
     orders = relationship("Order", back_populates="user", foreign_keys="Order.userId")
     reviews = relationship("Review", back_populates="user")
     loyaltyCard = relationship("LoyaltyCard", back_populates="user", uselist=False)
@@ -211,14 +270,24 @@ class Menu(Base):
     id: int = Column(Integer, primary_key=True)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=False)
     name: str = Column(String, nullable=False)
-    description: Optional[str] = Column(String, nullable=True)
+    description: str | None = Column(String, nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     displayOrder: int = Column(Integer, nullable=False, server_default="0")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     restaurant = relationship("Restaurant", back_populates="menus")
-    categories = relationship("MenuCategory", back_populates="menu", cascade="all, delete-orphan", order_by="MenuCategory.displayOrder")
+    categories = relationship(
+        "MenuCategory",
+        back_populates="menu",
+        cascade="all, delete-orphan",
+        order_by="MenuCategory.displayOrder",
+    )
 
 
 class MenuCategory(Base):
@@ -227,15 +296,25 @@ class MenuCategory(Base):
     id: int = Column(Integer, primary_key=True)
     menuId: int = Column(Integer, ForeignKey("menus.id", ondelete="CASCADE"), nullable=False)
     name: str = Column(String, nullable=False)
-    description: Optional[str] = Column(String, nullable=True)
-    image: Optional[str] = Column(String, nullable=True)
+    description: str | None = Column(String, nullable=True)
+    image: str | None = Column(String, nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     displayOrder: int = Column(Integer, nullable=False, server_default="0")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     menu = relationship("Menu", back_populates="categories")
-    dishes = relationship("Dish", back_populates="category", cascade="all, delete-orphan", order_by="Dish.displayOrder")
+    dishes = relationship(
+        "Dish",
+        back_populates="category",
+        cascade="all, delete-orphan",
+        order_by="Dish.displayOrder",
+    )
 
 
 class Dish(Base):
@@ -246,15 +325,20 @@ class Dish(Base):
     name: str = Column(String, nullable=False)
     description: str = Column(String, nullable=False)
     price: float = Column(Float, nullable=False)
-    image: Optional[str] = Column(String, nullable=True)
-    gallery: TypingList[str] = Column(ARRAY(String), nullable=False, server_default="{}")
+    image: str | None = Column(String, nullable=True)
+    gallery: list[str] = Column(ARRAY(String), nullable=False, server_default="{}")
     isAvailable: bool = Column(Boolean, nullable=False, server_default="true")
     quantity: int = Column(Integer, nullable=False)
     preparationTime: int = Column(Integer, nullable=False)
     popularity: float = Column(Float, nullable=False, server_default="0")
     displayOrder: int = Column(Integer, nullable=False, server_default="0")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     category = relationship("MenuCategory", back_populates="dishes")
     ingredients = relationship("DishIngredient", back_populates="dish", cascade="all, delete-orphan")
@@ -272,20 +356,27 @@ class Table(Base):
     number: str = Column(String, nullable=False)
     capacity: int = Column(Integer, nullable=False)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
-    status: TableStatus = Column(SAEnum(TableStatus, name="TableStatus", create_type=False), nullable=False, server_default="AVAILABLE")
-    qrCode: Optional[str] = Column(String, nullable=True)
-    nfcTag: Optional[str] = Column(String, nullable=True)
+    status: TableStatus = Column(
+        SAEnum(TableStatus, name="TableStatus", create_type=False),
+        nullable=False,
+        server_default="AVAILABLE",
+    )
+    qrCode: str | None = Column(String, nullable=True)
+    nfcTag: str | None = Column(String, nullable=True)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     restaurant = relationship("Restaurant", back_populates="tables")
     reservations = relationship("Reservation", back_populates="table")
     orders = relationship("Order", back_populates="table")
     sessions = relationship("TableSession", back_populates="table", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint("restaurantId", "number", name="uq_tables_restaurant_number"),
-    )
+    __table_args__ = (UniqueConstraint("restaurantId", "number", name="uq_tables_restaurant_number"),)
 
 
 class TableSession(Base):
@@ -295,7 +386,7 @@ class TableSession(Base):
     tableId: int = Column(Integer, ForeignKey("tables.id", ondelete="CASCADE"), nullable=False)
     waiterId: int = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     startedAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    endedAt: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    endedAt: datetime | None = Column(DateTime(timezone=True), nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
 
     table = relationship("Table", back_populates="sessions")
@@ -312,13 +403,22 @@ class Reservation(Base):
 
     id: int = Column(Integer, primary_key=True)
     userId: int = Column(Integer, ForeignKey("users.id"), nullable=False)
-    tableId: Optional[int] = Column(Integer, ForeignKey("tables.id"), nullable=True)
+    tableId: int | None = Column(Integer, ForeignKey("tables.id"), nullable=True)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
     reservationStart: datetime = Column(DateTime(timezone=True), nullable=False)
     reservationEnd: datetime = Column(DateTime(timezone=True), nullable=False)
-    status: ReservationStatus = Column(SAEnum(ReservationStatus, name="ReservationStatus", create_type=False), nullable=False, server_default="PENDING")
+    status: ReservationStatus = Column(
+        SAEnum(ReservationStatus, name="ReservationStatus", create_type=False),
+        nullable=False,
+        server_default="PENDING",
+    )
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     user = relationship("User", back_populates="reservations")
     table = relationship("Table", back_populates="reservations")
@@ -334,7 +434,7 @@ class OrderItem(Base):
     quantity: int = Column(Integer, nullable=False)
     unitPrice: float = Column(Float, nullable=False)
     totalPrice: float = Column(Float, nullable=False)
-    notes: Optional[str] = Column(String, nullable=True)
+    notes: str | None = Column(String, nullable=True)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     order = relationship("Order", back_populates="items")
@@ -346,36 +446,58 @@ class Order(Base):
 
     id: int = Column(Integer, primary_key=True)
     orderNumber: str = Column(String, unique=True, nullable=False)
-    userId: Optional[int] = Column(Integer, ForeignKey("users.id"), nullable=True)
+    userId: int | None = Column(Integer, ForeignKey("users.id"), nullable=True)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    tableId: Optional[int] = Column(Integer, ForeignKey("tables.id"), nullable=True)
-    type: OrderType = Column(SAEnum(OrderType, name="OrderType", create_type=False), nullable=False, server_default="DINE_IN")
-    status: OrderStatus = Column(SAEnum(OrderStatus, name="OrderStatus", create_type=False), nullable=False, server_default="PENDING")
+    tableId: int | None = Column(Integer, ForeignKey("tables.id"), nullable=True)
+    type: OrderType = Column(
+        SAEnum(OrderType, name="OrderType", create_type=False),
+        nullable=False,
+        server_default="DINE_IN",
+    )
+    status: OrderStatus = Column(
+        SAEnum(OrderStatus, name="OrderStatus", create_type=False),
+        nullable=False,
+        server_default="PENDING",
+    )
     subtotal: float = Column(Float, nullable=False)
     deliveryFee: float = Column(Float, nullable=False, server_default="0")
     discount: float = Column(Float, nullable=False, server_default="0")
     totalAmount: float = Column(Float, nullable=False)
-    deliveryAddressId: Optional[int] = Column(Integer, ForeignKey("addresses.id"), nullable=True)
-    estimatedDeliveryTime: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    actualDeliveryTime: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    paymentStatus: PaymentStatus = Column(SAEnum(PaymentStatus, name="PaymentStatus", create_type=False), nullable=False, server_default="PENDING")
-    paymentMethod: Optional[str] = Column(String, nullable=True)
-    notes: Optional[str] = Column(String, nullable=True)
+    deliveryAddressId: int | None = Column(Integer, ForeignKey("addresses.id"), nullable=True)
+    estimatedDeliveryTime: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    actualDeliveryTime: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    paymentStatus: PaymentStatus = Column(
+        SAEnum(PaymentStatus, name="PaymentStatus", create_type=False),
+        nullable=False,
+        server_default="PENDING",
+    )
+    paymentMethod: str | None = Column(String, nullable=True)
+    notes: str | None = Column(String, nullable=True)
     orderTime: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    confirmedAt: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    preparedAt: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    readyAt: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    completedAt: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    confirmedAt: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    preparedAt: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    readyAt: datetime | None = Column(DateTime(timezone=True), nullable=True)
+    completedAt: datetime | None = Column(DateTime(timezone=True), nullable=True)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
-    paymentId: Optional[int] = Column(Integer, ForeignKey("payments.id"), nullable=True)
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
+    paymentId: int | None = Column(Integer, ForeignKey("payments.id"), nullable=True)
 
     user = relationship("User", back_populates="orders", foreign_keys=[userId])
     restaurant = relationship("Restaurant", back_populates="orders")
     table = relationship("Table", back_populates="orders")
     deliveryAddress = relationship("Address", back_populates="orders", foreign_keys=[deliveryAddressId])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-    payment = relationship("Payments", uselist=False, foreign_keys="Order.paymentId", primaryjoin="Order.paymentId == Payments.id")
+    payment = relationship(
+        "Payments",
+        uselist=False,
+        foreign_keys="Order.paymentId",
+        primaryjoin="Order.paymentId == Payments.id",
+    )
     loyaltyTransactions = relationship("LoyaltyTransaction", back_populates="order")
 
 
@@ -384,10 +506,20 @@ class Payments(Base):
 
     id: int = Column(Integer, primary_key=True)
     paymentId: str = Column(String, unique=True, nullable=False)
-    orderId: int = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False)
+    orderId: int = Column(
+        Integer,
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    order = relationship("Order", uselist=False, foreign_keys="Payments.orderId", primaryjoin="Payments.orderId == Order.id")
+    order = relationship(
+        "Order",
+        uselist=False,
+        foreign_keys="Payments.orderId",
+        primaryjoin="Payments.orderId == Order.id",
+    )
 
 
 class Notification(Base):
@@ -398,15 +530,13 @@ class Notification(Base):
     type: str = Column(String, nullable=False)
     title: str = Column(String, nullable=False)
     body: str = Column(String, nullable=False)
-    _metadata: Optional[dict] = Column("metadata", JSON, nullable=True)
+    _metadata: dict | None = Column("metadata", JSON, nullable=True)
     isRead: bool = Column(Boolean, nullable=False, server_default="false")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user = relationship("User", back_populates="notifications")
 
-    __table_args__ = (
-        Index("ix_notifications_user_read", "userId", "isRead"),
-    )
+    __table_args__ = (Index("ix_notifications_user_read", "userId", "isRead"),)
 
 
 class Review(Base):
@@ -415,14 +545,19 @@ class Review(Base):
     id: int = Column(Integer, primary_key=True)
     userId: int = Column(Integer, ForeignKey("users.id"), nullable=False)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
-    dishId: Optional[int] = Column(Integer, ForeignKey("dishes.id"), nullable=True)
+    dishId: int | None = Column(Integer, ForeignKey("dishes.id"), nullable=True)
     rating: int = Column(Integer, nullable=False)
-    comment: Optional[str] = Column(String, nullable=True)
-    sentiment: Optional[str] = Column(String, nullable=True)
-    sentimentScore: Optional[float] = Column(Float, nullable=True)
+    comment: str | None = Column(String, nullable=True)
+    sentiment: str | None = Column(String, nullable=True)
+    sentimentScore: float | None = Column(Float, nullable=True)
     isVerified: bool = Column(Boolean, nullable=False, server_default="false")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     user = relationship("User", back_populates="reviews")
     restaurant = relationship("Restaurant", back_populates="reviews")
@@ -436,7 +571,12 @@ class LoyaltyCard(Base):
     userId: int = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     points: int = Column(Integer, nullable=False, server_default="0")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     user = relationship("User", back_populates="loyaltyCard")
     transactions = relationship("LoyaltyTransaction", back_populates="loyaltyCard")
@@ -451,7 +591,7 @@ class LoyaltyTransaction(Base):
     points: int = Column(Integer, nullable=False)
     type: str = Column(String, nullable=False)
     description: str = Column(String, nullable=False)
-    orderId: Optional[int] = Column(Integer, ForeignKey("orders.id"), nullable=True)
+    orderId: int | None = Column(Integer, ForeignKey("orders.id"), nullable=True)
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     loyaltyCard = relationship("LoyaltyCard", back_populates="transactions")
@@ -477,7 +617,12 @@ class OtpCode(Base):
 promotion_dishes = SATable(
     "promotion_dishes",
     Base.metadata,
-    Column("promotionId", Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "promotionId",
+        Integer,
+        ForeignKey("promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
     Column("dishId", Integer, ForeignKey("dishes.id", ondelete="CASCADE"), primary_key=True),
 )
 
@@ -489,18 +634,23 @@ class Promotion(Base):
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
     title: str = Column(String, nullable=False)
     description: str = Column(String, nullable=False)
-    image: Optional[str] = Column(String, nullable=True)
+    image: str | None = Column(String, nullable=True)
     type: PromotionType = Column(SAEnum(PromotionType, name="PromotionType", create_type=False), nullable=False)
     discountType: DiscountType = Column(SAEnum(DiscountType, name="DiscountType", create_type=False), nullable=False)
     discountValue: float = Column(Float, nullable=False)
-    minOrderAmount: Optional[float] = Column(Float, nullable=True)
+    minOrderAmount: float | None = Column(Float, nullable=True)
     startDate: datetime = Column(DateTime(timezone=True), nullable=False)
     endDate: datetime = Column(DateTime(timezone=True), nullable=False)
-    maxUses: Optional[int] = Column(Integer, nullable=True)
+    maxUses: int | None = Column(Integer, nullable=True)
     currentUses: int = Column(Integer, nullable=False, server_default="0")
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     restaurant = relationship("Restaurant", back_populates="promotions")
     dishes = relationship("Dish", secondary="promotion_dishes", back_populates="promotions")
@@ -512,18 +662,23 @@ class Inventory(Base):
     id: int = Column(Integer, primary_key=True)
     restaurantId: int = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
     name: str = Column(String, nullable=False)
-    description: Optional[str] = Column(String, nullable=True)
-    category: Optional[str] = Column(String, nullable=True)
+    description: str | None = Column(String, nullable=True)
+    category: str | None = Column(String, nullable=True)
     unit: str = Column(String, nullable=False)
     currentStock: float = Column(Float, nullable=False)
     minimumStock: float = Column(Float, nullable=False)
     unitPrice: float = Column(Float, nullable=False)
-    supplier: Optional[str] = Column(String, nullable=True)
-    location: Optional[str] = Column(String, nullable=True)
-    expiryDate: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    supplier: str | None = Column(String, nullable=True)
+    location: str | None = Column(String, nullable=True)
+    expiryDate: datetime | None = Column(DateTime(timezone=True), nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     restaurant = relationship("Restaurant", back_populates="inventory")
     old_ingredient_links = relationship("DishInventoryLink", back_populates="inventory")
@@ -546,9 +701,9 @@ class Ingredient(Base):
 
     id: int = Column(Integer, primary_key=True)
     name: str = Column(String, nullable=False)
-    description: Optional[str] = Column(String, nullable=True)
-    allergenInfo: Optional[str] = Column(String, nullable=True)
-    category: Optional[str] = Column(String, nullable=True)
+    description: str | None = Column(String, nullable=True)
+    allergenInfo: str | None = Column(String, nullable=True)
+    category: str | None = Column(String, nullable=True)
     isVegetarian: bool = Column(Boolean, nullable=False, server_default="false")
     isVegan: bool = Column(Boolean, nullable=False, server_default="false")
     isGlutenFree: bool = Column(Boolean, nullable=False, server_default="false")
@@ -556,7 +711,12 @@ class Ingredient(Base):
     nutritionalInfo = Column(JSON, nullable=True)
     isActive: bool = Column(Boolean, nullable=False, server_default="true")
     createdAt: datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updatedAt: datetime = Column(DateTime(timezone=True), nullable=False, onupdate=func.now(), server_default=func.now())
+    updatedAt: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        onupdate=func.now(),
+        server_default=func.now(),
+    )
 
     dish_ingredients = relationship("DishIngredient", back_populates="ingredient")
 
@@ -567,10 +727,10 @@ class DishIngredient(Base):
     id: int = Column(Integer, primary_key=True)
     dishId: int = Column(Integer, ForeignKey("dishes.id", ondelete="CASCADE"), nullable=False)
     ingredientId: int = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), nullable=False)
-    quantity: Optional[float] = Column(Float, nullable=True)
+    quantity: float | None = Column(Float, nullable=True)
     isOptional: bool = Column(Boolean, nullable=False, server_default="false")
     isVisible: bool = Column(Boolean, nullable=False, server_default="true")
-    notes: Optional[str] = Column(String, nullable=True)
+    notes: str | None = Column(String, nullable=True)
 
     dish = relationship("Dish", back_populates="ingredients")
     ingredient = relationship("Ingredient", back_populates="dish_ingredients")

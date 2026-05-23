@@ -14,9 +14,8 @@ from app.models.analytics import (
     RestaurantAnalyticsResponse,
     TopDishItem,
 )
-from app.models.sqlalchemy_models import Dish, Order, OrderItem
+from app.models.sqlalchemy_models import Order, OrderItem
 from app.models.user import UserRole
-
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -34,10 +33,7 @@ def build_hourly_metrics(orders) -> list[HourlyMetricItem]:
     for order in orders:
         hourly_counts[order.orderTime.hour] += 1
 
-    return [
-        HourlyMetricItem(hour=hour, orderCount=hourly_counts[hour])
-        for hour in range(24)
-    ]
+    return [HourlyMetricItem(hour=hour, orderCount=hourly_counts[hour]) for hour in range(24)]
 
 
 def get_order_prep_end_time(order):
@@ -200,21 +196,25 @@ async def get_kitchen_analytics(
             "avgPrepTimeMinutes": avg_prep_minutes,
             "avgPrepTimeTrend": -2.5,
             "customerRating": 4.8,
-            "customerRatingTrend": 0.1
+            "customerRatingTrend": 0.1,
         }
-    
+
     if section == "order-volume":
         return [
             {"time": f"{item.hour:02d}:00", "orders": item.orderCount}
             for item in build_hourly_metrics(completed_or_active_orders)
         ]
-        
+
     if section == "top-dishes":
         return [
-            {"name": item.dishName, "orders": item.quantitySold, "revenue": item.revenue}
+            {
+                "name": item.dishName,
+                "orders": item.quantitySold,
+                "revenue": item.revenue,
+            }
             for item in top_dish_items[:5]
         ]
-        
+
     if section == "kitchen-efficiency":
         daily_stats = {}
         for order in orders:
@@ -227,11 +227,17 @@ async def get_kitchen_analytics(
                 prep_minutes = (prep_end - order.confirmedAt).total_seconds() / 60
                 if prep_minutes >= 0:
                     daily_stats[day_str]["prep_durations"].append(prep_minutes)
-        
+
         result = []
         for day, stats in daily_stats.items():
             avg_time = sum(stats["prep_durations"]) / len(stats["prep_durations"]) if stats["prep_durations"] else 0
-            result.append({"day": day, "avgTimeMinutes": round(avg_time, 1), "orders": stats["orders"]})
+            result.append(
+                {
+                    "day": day,
+                    "avgTimeMinutes": round(avg_time, 1),
+                    "orders": stats["orders"],
+                }
+            )
         if not result:
             result = [{"day": datetime.now().strftime("%a"), "avgTimeMinutes": 0, "orders": 0}]
         return result
@@ -243,17 +249,17 @@ async def get_kitchen_analytics(
                 status_counts["Completed"] += 1
             elif order.status in ["PENDING", "PREPARING", "READY"]:
                 # simple logic: if estimatedDeliveryTime is in the past, it's delayed
-                if order.estimatedDeliveryTime and datetime.now(order.estimatedDeliveryTime.tzinfo) > order.estimatedDeliveryTime:
+                if (
+                    order.estimatedDeliveryTime
+                    and datetime.now(order.estimatedDeliveryTime.tzinfo) > order.estimatedDeliveryTime
+                ):
                     status_counts["Delayed"] += 1
                 else:
                     status_counts["In Progress"] += 1
-        
+
         total = sum(status_counts.values()) or 1
-        return [
-            {"name": k, "value": round(v / total * 100, 1)}
-            for k, v in status_counts.items() if v > 0
-        ]
-        
+        return [{"name": k, "value": round(v / total * 100, 1)} for k, v in status_counts.items() if v > 0]
+
     if section == "revenue-trend":
         monthly_stats = {}
         for order in completed_or_active_orders:
@@ -262,10 +268,9 @@ async def get_kitchen_analytics(
                 monthly_stats[month_str] = {"revenue": 0.0, "orders": 0}
             monthly_stats[month_str]["revenue"] += order.totalAmount
             monthly_stats[month_str]["orders"] += 1
-        
+
         result = [
-            {"month": k, "revenue": round(v["revenue"], 2), "orders": v["orders"]}
-            for k, v in monthly_stats.items()
+            {"month": k, "revenue": round(v["revenue"], 2), "orders": v["orders"]} for k, v in monthly_stats.items()
         ]
         if not result:
             result = [{"month": datetime.now().strftime("%b"), "revenue": 0, "orders": 0}]

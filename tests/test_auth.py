@@ -6,15 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.auth.jwt import (
-    create_access_token,
     create_refresh_token,
     get_password_hash,
 )
-from app.models.auth import UserRegister, UserResponse, UserUpdate
-from app.models.sqlalchemy_models import RefreshToken, User as SAUser
+from app.models.sqlalchemy_models import RefreshToken
+from app.models.sqlalchemy_models import User as SAUser
 from app.models.user import UserRole
-from tests.conftest import _make_mock_db, _make_mock_user, _mock_result
-
+from tests.conftest import _make_mock_user, _mock_result
 
 # ── Register ─────────────────────────────────────────────────────────────────
 
@@ -58,9 +56,7 @@ async def test_register_success(client):
 async def test_register_duplicate_email(client, mock_client_user):
     """Register with existing email → 400."""
     ac, mock_db = client
-    mock_db.execute.return_value = _mock_result(
-        scalar_one_or_none_val=mock_client_user
-    )
+    mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
     resp = await ac.post(
         "/api/auth/register",
@@ -86,9 +82,7 @@ async def test_login_success(client, mock_client_user):
     ac, mock_db = client
 
     mock_client_user.password = get_password_hash("password123")
-    mock_db.execute.return_value = _mock_result(
-        scalar_one_or_none_val=mock_client_user
-    )
+    mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
     resp = await ac.post(
         "/api/auth/login",
@@ -108,9 +102,7 @@ async def test_login_wrong_password(client, mock_client_user):
     ac, mock_db = client
 
     mock_client_user.password = get_password_hash("correctpassword")
-    mock_db.execute.return_value = _mock_result(
-        scalar_one_or_none_val=mock_client_user
-    )
+    mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
     resp = await ac.post(
         "/api/auth/login",
@@ -149,14 +141,10 @@ async def test_refresh_token_success(client):
 
     mock_user = _make_mock_user(user_id=1, role="CLIENT")
 
-    mock_db.execute.return_value = _mock_result(
-        scalar_one_or_none_val=mock_stored
-    )
+    mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_stored)
     mock_db.get.return_value = mock_user
 
-    resp = await ac.post(
-        "/api/auth/refresh", json={"refresh_token": refresh_token_str}
-    )
+    resp = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_token_str})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert "access_token" in body
@@ -182,9 +170,7 @@ async def test_refresh_token_revoked(client):
         scalar_one_or_none_val=None  # query filters isRevoked==False
     )
 
-    resp = await ac.post(
-        "/api/auth/refresh", json={"refresh_token": refresh_token_str}
-    )
+    resp = await ac.post("/api/auth/refresh", json={"refresh_token": refresh_token_str})
     assert resp.status_code == 401, resp.text
 
 
@@ -193,13 +179,9 @@ async def test_refresh_token_expired(client):
     """Expired refresh token → 401 (verify_token returns None)."""
     ac, mock_db = client
 
-    expired_token = create_refresh_token(
-        data={"sub": "1"}, expires_delta=timedelta(hours=-1)
-    )
+    expired_token = create_refresh_token(data={"sub": "1"}, expires_delta=timedelta(hours=-1))
 
-    resp = await ac.post(
-        "/api/auth/refresh", json={"refresh_token": expired_token}
-    )
+    resp = await ac.post("/api/auth/refresh", json={"refresh_token": expired_token})
     assert resp.status_code == 401, resp.text
 
 
@@ -213,9 +195,7 @@ async def test_get_me_authenticated(client, client_token, mock_client_user):
 
     with patch("app.middleware.auth.get_db", new_callable=AsyncMock) as m_get:
         m_get.return_value = mock_db
-        mock_db.execute.return_value = _mock_result(
-            scalar_one_or_none_val=mock_client_user
-        )
+        mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
         resp = await ac.get(
             "/api/auth/me",

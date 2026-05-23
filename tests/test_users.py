@@ -1,10 +1,11 @@
 """Tests for the users route module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
-from tests.conftest import _mock_result, _MockModel
+import pytest
+
+from tests.conftest import _mock_result
 
 
 @pytest.mark.asyncio
@@ -12,6 +13,7 @@ async def test_update_push_token(auth_client, mock_client_user, client_token):
     ac, mock_db = auth_client
 
     from app.models.sqlalchemy_models import PushToken
+
     async def refresh_side_effect(obj):
         if isinstance(obj, PushToken):
             obj.id = 1

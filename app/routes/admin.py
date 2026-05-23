@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select
@@ -26,7 +26,6 @@ from app.models.sqlalchemy_models import (
     User,
 )
 
-
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 DEFAULT_OPERATING_HOURS = {
@@ -40,7 +39,7 @@ DEFAULT_OPERATING_HOURS = {
 }
 
 
-def build_default_platform_settings() -> Dict[str, Any]:
+def build_default_platform_settings() -> dict[str, Any]:
     return {
         "id": 1,
         "currency": "USD",
@@ -59,9 +58,7 @@ def get_window_start(range_value: AnalyticsRange, window_end: datetime) -> datet
 
 
 async def get_or_create_platform_settings(db: AsyncSession):
-    result = await db.execute(
-        select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1)
-    )
+    result = await db.execute(select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1))
     row = result.scalars().first()
     if row:
         return row
@@ -73,9 +70,7 @@ async def get_or_create_platform_settings(db: AsyncSession):
         await db.refresh(obj)
         return obj
     except Exception as exc:
-        result = await db.execute(
-            select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1)
-        )
+        result = await db.execute(select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1))
         row = result.scalars().first()
         if row:
             return row
@@ -147,54 +142,48 @@ async def get_admin_stats(
 
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_restaurants = (
-        await db.execute(select(func.count(Restaurant.id)))
-    ).scalar()
+    total_restaurants = (await db.execute(select(func.count(Restaurant.id)))).scalar()
     total_orders_today = (
-        await db.execute(
-            select(func.count(Order.id)).where(Order.orderTime >= start_of_today)
-        )
+        await db.execute(select(func.count(Order.id)).where(Order.orderTime >= start_of_today))
     ).scalar()
-    active_users = (
-        await db.execute(
-            select(func.count(User.id)).where(User.isActive == True)
-        )
-    ).scalar()
+    active_users = (await db.execute(select(func.count(User.id)).where(User.isActive == True))).scalar()
 
-    todays_orders = (
-        await db.execute(
-            select(Order).where(Order.orderTime >= start_of_today)
-        )
-    ).scalars().all()
+    todays_orders = (await db.execute(select(Order).where(Order.orderTime >= start_of_today))).scalars().all()
     revenue_today = round(
         sum(order.totalAmount for order in todays_orders if order.status != "CANCELLED"),
         2,
     )
 
     recent_orders = (
-        await db.execute(
-            select(Order)
-            .options(selectinload(Order.restaurant))
-            .order_by(Order.orderTime.desc())
-            .limit(5)
+        (
+            await db.execute(
+                select(Order).options(selectinload(Order.restaurant)).order_by(Order.orderTime.desc()).limit(5)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     recent_reservations = (
-        await db.execute(
-            select(Reservation)
-            .options(selectinload(Reservation.restaurant))
-            .order_by(Reservation.createdAt.desc())
-            .limit(3)
+        (
+            await db.execute(
+                select(Reservation)
+                .options(selectinload(Reservation.restaurant))
+                .order_by(Reservation.createdAt.desc())
+                .limit(3)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     recent_reviews = (
-        await db.execute(
-            select(Review)
-            .options(selectinload(Review.restaurant))
-            .order_by(Review.createdAt.desc())
-            .limit(3)
+        (
+            await db.execute(
+                select(Review).options(selectinload(Review.restaurant)).order_by(Review.createdAt.desc()).limit(3)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return AdminStatsResponse(
         totalRestaurants=total_restaurants,
@@ -221,24 +210,25 @@ async def get_admin_analytics(
     window_start = get_window_start(time_range, window_end)
 
     orders = (
-        await db.execute(
-            select(Order)
-            .where(
-                and_(
-                    Order.orderTime >= window_start,
-                    Order.orderTime <= window_end,
+        (
+            await db.execute(
+                select(Order)
+                .where(
+                    and_(
+                        Order.orderTime >= window_start,
+                        Order.orderTime <= window_end,
+                    )
                 )
+                .options(selectinload(Order.restaurant))
             )
-            .options(selectinload(Order.restaurant))
         )
-    ).scalars().all()
-    total_restaurants = (
-        await db.execute(select(func.count(Restaurant.id)))
-    ).scalar()
+        .scalars()
+        .all()
+    )
+    total_restaurants = (await db.execute(select(func.count(Restaurant.id)))).scalar()
     total_reservations = (
         await db.execute(
-            select(func.count(Reservation.id))
-            .where(
+            select(func.count(Reservation.id)).where(
                 and_(
                     Reservation.createdAt >= window_start,
                     Reservation.createdAt <= window_end,
@@ -248,8 +238,7 @@ async def get_admin_analytics(
     ).scalar()
     total_reviews = (
         await db.execute(
-            select(func.count(Review.id))
-            .where(
+            select(func.count(Review.id)).where(
                 and_(
                     Review.createdAt >= window_start,
                     Review.createdAt <= window_end,
@@ -258,8 +247,8 @@ async def get_admin_analytics(
         )
     ).scalar()
 
-    orders_by_status: Dict[str, int] = {}
-    restaurant_breakdown: Dict[int, Dict[str, Any]] = {}
+    orders_by_status: dict[str, int] = {}
+    restaurant_breakdown: dict[int, dict[str, Any]] = {}
     unique_customers = set()
     revenue_orders = 0
     total_revenue = 0.0
@@ -270,11 +259,7 @@ async def get_admin_analytics(
         if order.userId:
             unique_customers.add(order.userId)
 
-        restaurant_name = (
-            order.restaurant.name
-            if order.restaurant
-            else f"Restaurant {order.restaurantId}"
-        )
+        restaurant_name = order.restaurant.name if order.restaurant else f"Restaurant {order.restaurantId}"
         if order.restaurantId not in restaurant_breakdown:
             restaurant_breakdown[order.restaurantId] = {
                 "restaurantId": order.restaurantId,

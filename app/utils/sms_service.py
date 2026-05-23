@@ -1,11 +1,11 @@
 import random
 import string
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from twilio.base.exceptions import TwilioException
 from twilio.rest import Client
-from sqlalchemy import select, update as sa_update
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -220,7 +220,7 @@ class SMSService:
             await db.close()
 
 
-def get_sms_service() -> Optional[SMSService]:
+def get_sms_service() -> SMSService | None:
     """Get SMS service instance if properly configured."""
     try:
         return SMSService()

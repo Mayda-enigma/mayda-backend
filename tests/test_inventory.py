@@ -1,10 +1,11 @@
 """Tests for the inventory route module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
-from tests.conftest import _mock_result, _make_mock_restaurant, _MockModel
+import pytest
+
+from tests.conftest import _make_mock_restaurant, _mock_result, _MockModel
 
 
 @pytest.mark.asyncio
@@ -30,10 +31,23 @@ async def test_list_inventory(staff_client, mock_staff_user, staff_token):
     mock_inventory_item.updatedAt = datetime(2024, 1, 1)
     mock_inventory_item.restaurant = restaurant
 
-    col_names = ['id', 'restaurantId', 'name', 'description', 'category', 'unit',
-                  'currentStock', 'minimumStock', 'unitPrice', 'supplier', 'location',
-                  'expiryDate', 'isActive', 'createdAt', 'updatedAt']
-    from app.models.sqlalchemy_models import Inventory
+    col_names = [
+        "id",
+        "restaurantId",
+        "name",
+        "description",
+        "category",
+        "unit",
+        "currentStock",
+        "minimumStock",
+        "unitPrice",
+        "supplier",
+        "location",
+        "expiryDate",
+        "isActive",
+        "createdAt",
+        "updatedAt",
+    ]
     table_mock = MagicMock()
     table_mock.columns = []
     for n in col_names:
@@ -60,24 +74,47 @@ async def test_create_inventory_item(staff_client, mock_staff_user, staff_token)
     restaurant = _make_mock_restaurant()
     mock_db.get.return_value = restaurant
 
-    col_names = ['id', 'restaurantId', 'name', 'description', 'category', 'unit',
-                  'currentStock', 'minimumStock', 'unitPrice', 'supplier', 'location',
-                  'expiryDate', 'isActive', 'createdAt', 'updatedAt']
+    col_names = [
+        "id",
+        "restaurantId",
+        "name",
+        "description",
+        "category",
+        "unit",
+        "currentStock",
+        "minimumStock",
+        "unitPrice",
+        "supplier",
+        "location",
+        "expiryDate",
+        "isActive",
+        "createdAt",
+        "updatedAt",
+    ]
 
-    from app.models.sqlalchemy_models import Inventory as InventoryModel, Restaurant
+    from app.models.sqlalchemy_models import Inventory as InventoryModel
+    from app.models.sqlalchemy_models import Restaurant
+
     created_item = InventoryModel(
-        restaurantId=1, name="Tomatoes", description=None,
-        category="Produce", unit="kg", currentStock=50.0,
-        minimumStock=10.0, unitPrice=3.0, supplier=None,
-        location=None, expiryDate=None
+        restaurantId=1,
+        name="Tomatoes",
+        description=None,
+        category="Produce",
+        unit="kg",
+        currentStock=50.0,
+        minimumStock=10.0,
+        unitPrice=3.0,
+        supplier=None,
+        location=None,
+        expiryDate=None,
     )
     created_item.id = 1
     created_item.isActive = True
     created_item.createdAt = datetime(2024, 1, 1)
     created_item.updatedAt = datetime(2024, 1, 1)
-    created_item.restaurant = Restaurant(id=1, name='Test Restaurant', isActive=True)
+    created_item.restaurant = Restaurant(id=1, name="Test Restaurant", isActive=True)
 
-    mock_db.get.return_value = Restaurant(id=1, name='Test Restaurant', isActive=True)
+    mock_db.get.return_value = Restaurant(id=1, name="Test Restaurant", isActive=True)
 
     async def refresh_side_effect(obj):
         if isinstance(obj, InventoryModel):
@@ -113,18 +150,27 @@ async def test_create_inventory_item(staff_client, mock_staff_user, staff_token)
 async def test_update_inventory_item(staff_client, mock_staff_user, staff_token):
     ac, mock_db = staff_client
 
-    from app.models.sqlalchemy_models import Inventory as InventoryModel, Restaurant
+    from app.models.sqlalchemy_models import Inventory as InventoryModel
+    from app.models.sqlalchemy_models import Restaurant
+
     inventory_item = InventoryModel(
-        restaurantId=1, name="Tomatoes", description=None,
-        category="Produce", unit="kg", currentStock=50.0,
-        minimumStock=10.0, unitPrice=3.0, supplier=None,
-        location=None, expiryDate=None
+        restaurantId=1,
+        name="Tomatoes",
+        description=None,
+        category="Produce",
+        unit="kg",
+        currentStock=50.0,
+        minimumStock=10.0,
+        unitPrice=3.0,
+        supplier=None,
+        location=None,
+        expiryDate=None,
     )
     inventory_item.id = 1
     inventory_item.isActive = True
     inventory_item.createdAt = datetime(2024, 1, 1)
     inventory_item.updatedAt = datetime(2024, 1, 1)
-    inventory_item.restaurant = Restaurant(id=1, name='Test Restaurant', isActive=True)
+    inventory_item.restaurant = Restaurant(id=1, name="Test Restaurant", isActive=True)
 
     mock_db.get.return_value = inventory_item
     mock_db.execute.side_effect = [

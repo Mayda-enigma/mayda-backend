@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,7 +10,7 @@ class NotificationResponse(BaseModel):
     type: str
     title: str
     body: str
-    metadata: Optional[Dict[str, Any]] = Field(default=None, validation_alias="_metadata")
+    metadata: dict[str, Any] | None = Field(default=None, validation_alias="_metadata")
     isRead: bool
     createdAt: datetime
 

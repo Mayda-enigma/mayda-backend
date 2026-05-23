@@ -1,56 +1,56 @@
-from pydantic import BaseModel, validator, Field
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, Field, validator
 
 
 class InventoryItemCreate(BaseModel):
     restaurantId: int
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     category: str = Field(..., min_length=1, max_length=50)
     unit: str = Field(..., min_length=1, max_length=20)  # kg, lbs, pcs, liters, etc.
     currentStock: float = Field(..., ge=0)
     minimumStock: float = Field(..., ge=0)
     unitPrice: float = Field(..., ge=0)
-    supplier: Optional[str] = Field(None, max_length=100)
-    location: Optional[str] = Field(None, max_length=100)  # Storage location
-    expiryDate: Optional[datetime] = None
+    supplier: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=100)  # Storage location
+    expiryDate: datetime | None = None
 
 
 class InventoryItemUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
-    category: Optional[str] = Field(None, min_length=1, max_length=50)
-    unit: Optional[str] = Field(None, min_length=1, max_length=20)
-    currentStock: Optional[float] = Field(None, ge=0)
-    minimumStock: Optional[float] = Field(None, ge=0)
-    unitPrice: Optional[float] = Field(None, ge=0)
-    supplier: Optional[str] = Field(None, max_length=100)
-    location: Optional[str] = Field(None, max_length=100)
-    expiryDate: Optional[datetime] = None
-    isActive: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    category: str | None = Field(None, min_length=1, max_length=50)
+    unit: str | None = Field(None, min_length=1, max_length=20)
+    currentStock: float | None = Field(None, ge=0)
+    minimumStock: float | None = Field(None, ge=0)
+    unitPrice: float | None = Field(None, ge=0)
+    supplier: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=100)
+    expiryDate: datetime | None = None
+    isActive: bool | None = None
 
 
 class InventoryItemResponse(BaseModel):
     id: int
     restaurantId: int
-    restaurant: Optional[dict] = None
+    restaurant: dict | None = None
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     category: str
     unit: str
     currentStock: float
     minimumStock: float
     unitPrice: float
     totalValue: float  # currentStock * unitPrice
-    supplier: Optional[str] = None
-    location: Optional[str] = None
-    expiryDate: Optional[datetime] = None
+    supplier: str | None = None
+    location: str | None = None
+    expiryDate: datetime | None = None
     isActive: bool
     isLowStock: bool  # currentStock <= minimumStock
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -59,12 +59,12 @@ class InventoryStockUpdate(BaseModel):
     itemId: int
     quantityChange: float  # Positive for addition, negative for consumption
     reason: str = Field(..., min_length=1, max_length=200)
-    notes: Optional[str] = Field(None, max_length=500)
-    
-    @validator('quantityChange')
+    notes: str | None = Field(None, max_length=500)
+
+    @validator("quantityChange")
     def validate_quantity_change(cls, v):
         if v == 0:
-            raise ValueError('Quantity change cannot be zero')
+            raise ValueError("Quantity change cannot be zero")
         return v
 
 
@@ -96,21 +96,21 @@ class InventoryLowStockAlert(BaseModel):
     currentStock: float
     minimumStock: float
     unit: str
-    supplier: Optional[str] = None
-    location: Optional[str] = None
-    expiryDate: Optional[datetime] = None
+    supplier: str | None = None
+    location: str | None = None
+    expiryDate: datetime | None = None
 
     class Config:
         from_attributes = True
 
 
 class InventorySearchFilters(BaseModel):
-    category: Optional[str] = None
-    supplier: Optional[str] = None
-    location: Optional[str] = None
-    lowStockOnly: Optional[bool] = False
-    expiringSoon: Optional[bool] = False  # Items expiring in next 7 days
-    isActive: Optional[bool] = True
+    category: str | None = None
+    supplier: str | None = None
+    location: str | None = None
+    lowStockOnly: bool | None = False
+    expiringSoon: bool | None = False  # Items expiring in next 7 days
+    isActive: bool | None = True
 
 
 class InventoryCategoryResponse(BaseModel):

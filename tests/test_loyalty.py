@@ -1,10 +1,11 @@
 """Tests for the loyalty route module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import MagicMock
 
-from tests.conftest import _mock_result, _make_mock_restaurant, _MockModel
+import pytest
+
+from tests.conftest import _make_mock_restaurant, _mock_result, _MockModel
 
 
 @pytest.mark.asyncio

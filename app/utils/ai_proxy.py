@@ -53,6 +53,7 @@ async def proxy_to_service(
 
     raise HTTPException(status_code=response.status_code, detail=detail)
 
+
 async def proxy_multipart_to_service(
     base_url: str,
     path: str,

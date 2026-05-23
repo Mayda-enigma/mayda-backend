@@ -15,7 +15,6 @@ from app.middleware.roles import get_current_admin_user, get_current_staff_user
 from app.models.user import UserRole
 from tests.conftest import _make_mock_db, _mock_result
 
-
 # ── get_current_user (token + DB lookup) ─────────────────────────────────────
 
 
@@ -26,9 +25,7 @@ async def test_get_current_user_valid_token(mock_client_user):
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
     mock_db = _make_mock_db()
-    mock_db.execute.return_value = _mock_result(
-        scalar_one_or_none_val=mock_client_user
-    )
+    mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
     with patch("app.middleware.auth.get_db", new_callable=AsyncMock) as m:
         m.return_value = mock_db
@@ -42,9 +39,7 @@ async def test_get_current_user_valid_token(mock_client_user):
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_token():
     """Malformed token → 401."""
-    creds = HTTPAuthorizationCredentials(
-        scheme="Bearer", credentials="invalid-token"
-    )
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="invalid-token")
 
     with pytest.raises(HTTPException) as exc:
         await auth_middleware.get_current_user(creds)
@@ -59,12 +54,8 @@ async def test_get_current_user_expired_token():
         "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         "type": "access",
     }
-    expired_token = jwt.encode(
-        exp_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-    )
-    creds = HTTPAuthorizationCredentials(
-        scheme="Bearer", credentials=expired_token
-    )
+    expired_token = jwt.encode(exp_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=expired_token)
 
     with pytest.raises(HTTPException) as exc:
         await auth_middleware.get_current_user(creds)

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class UserRole(str, Enum):
     """User roles enum matching Prisma schema."""
+
     CLIENT = "CLIENT"
     WAITER = "WAITER"
     CHEF = "CHEF"
@@ -15,18 +16,21 @@ class UserRole(str, Enum):
 
 class PushTokenPlatform(str, Enum):
     """Supported mobile push platforms."""
+
     IOS = "ios"
     ANDROID = "android"
 
 
 class PushTokenUpsertRequest(BaseModel):
     """Push token registration request model."""
+
     token: str = Field(..., min_length=1)
     platform: PushTokenPlatform
 
 
 class PushTokenResponse(BaseModel):
     """Push token response model."""
+
     id: int
     userId: int
     token: str

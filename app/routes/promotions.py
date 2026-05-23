@@ -1,20 +1,24 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
 from datetime import datetime
-from app.models.promotion import (
-    PromotionCreate, PromotionUpdate, PromotionResponse, PromotionListResponse,
-    PromotionUsageRequest, PromotionUsageResponse, ActivePromotionsResponse,
-    PromotionType, DiscountType
-)
-from app.core.database import get_db_session
-from app.middleware.roles import (
-    get_current_staff_user
-)
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, update as sa_update, delete as sa_delete
-from sqlalchemy.orm import selectinload
-from app.models.sqlalchemy_models import Promotion, Restaurant, Dish, Menu, MenuCategory
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.database import get_db_session
+from app.middleware.roles import get_current_staff_user
+from app.models.promotion import (
+    ActivePromotionsResponse,
+    DiscountType,
+    PromotionCreate,
+    PromotionListResponse,
+    PromotionResponse,
+    PromotionType,
+    PromotionUpdate,
+    PromotionUsageRequest,
+    PromotionUsageResponse,
+)
+from app.models.sqlalchemy_models import Dish, Menu, MenuCategory, Promotion, Restaurant
 
 router = APIRouter(prefix="/promotions", tags=["Promotions"])
 
@@ -24,8 +28,8 @@ router = APIRouter(prefix="/promotions", tags=["Promotions"])
 
 @router.get("/active", response_model=ActivePromotionsResponse)
 async def get_active_promotions(
-    restaurant_id: Optional[int] = Query(None),
-    promotion_type: Optional[PromotionType] = Query(None),
+    restaurant_id: int | None = Query(None),
+    promotion_type: PromotionType | None = Query(None),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get all active promotions (Public endpoint)."""
@@ -33,7 +37,7 @@ async def get_active_promotions(
     conditions = [
         Promotion.isActive == True,
         Promotion.startDate <= datetime.now(),
-        Promotion.endDate >= datetime.now()
+        Promotion.endDate >= datetime.now(),
     ]
 
     if restaurant_id:
@@ -44,10 +48,7 @@ async def get_active_promotions(
 
     stmt = (
         select(Promotion)
-        .options(
-            selectinload(Promotion.restaurant),
-            selectinload(Promotion.dishes)
-        )
+        .options(selectinload(Promotion.restaurant), selectinload(Promotion.dishes))
         .where(and_(*conditions))
         .order_by(Promotion.createdAt.desc())
     )
@@ -77,11 +78,11 @@ async def get_active_promotions(
     return ActivePromotionsResponse(
         totalPromotions=len(active_promotions),
         restaurantPromotions=restaurant_promotions,
-        dishSpecificPromotions=dish_specific_promotions
+        dishSpecificPromotions=dish_specific_promotions,
     )
 
 
-@router.get("/restaurant/{restaurant_id}", response_model=List[PromotionListResponse])
+@router.get("/restaurant/{restaurant_id}", response_model=list[PromotionListResponse])
 async def get_restaurant_promotions(
     restaurant_id: int,
     active_only: bool = Query(True),
@@ -97,7 +98,7 @@ async def get_restaurant_promotions(
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found or inactive"
+            detail="Restaurant not found or inactive",
         )
 
     # Build where clause
@@ -105,11 +106,13 @@ async def get_restaurant_promotions(
 
     if active_only:
         current_time = datetime.now()
-        conditions.extend([
-            Promotion.isActive == True,
-            Promotion.startDate <= current_time,
-            Promotion.endDate >= current_time
-        ])
+        conditions.extend(
+            [
+                Promotion.isActive == True,
+                Promotion.startDate <= current_time,
+                Promotion.endDate >= current_time,
+            ]
+        )
 
     stmt = (
         select(Promotion)
@@ -138,26 +141,19 @@ async def get_restaurant_promotions(
 async def calculate_promotion_discount(request: PromotionUsageRequest, db: AsyncSession = Depends(get_db_session)):
     """Calculate discount for a promotion (Public endpoint)."""
 
-    stmt = (
-        select(Promotion)
-        .options(selectinload(Promotion.restaurant))
-        .where(Promotion.id == request.promotionId)
-    )
+    stmt = select(Promotion).options(selectinload(Promotion.restaurant)).where(Promotion.id == request.promotionId)
     result = await db.execute(stmt)
     promotion = result.scalar_one_or_none()
 
     if not promotion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promotion not found")
 
     if not promotion.restaurant.isActive:
         return PromotionUsageResponse(
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message="Restaurant is currently inactive"
+            message="Restaurant is currently inactive",
         )
 
     # Check if promotion is active
@@ -167,7 +163,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message="Promotion is not active"
+            message="Promotion is not active",
         )
 
     if current_time < promotion.startDate:
@@ -175,7 +171,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message="Promotion has not started yet"
+            message="Promotion has not started yet",
         )
 
     if current_time > promotion.endDate:
@@ -183,7 +179,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message="Promotion has expired"
+            message="Promotion has expired",
         )
 
     # Check usage limit
@@ -192,7 +188,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message="Promotion usage limit reached"
+            message="Promotion usage limit reached",
         )
 
     # Check minimum order amount
@@ -201,7 +197,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
             applicable=False,
             discountAmount=0,
             finalAmount=request.orderAmount,
-            message=f"Minimum order amount is {promotion.minOrderAmount}"
+            message=f"Minimum order amount is {promotion.minOrderAmount}",
         )
 
     # Calculate discount
@@ -218,7 +214,7 @@ async def calculate_promotion_discount(request: PromotionUsageRequest, db: Async
         applicable=True,
         discountAmount=discount_amount,
         finalAmount=final_amount,
-        message=f"Discount applied: {promotion.title}"
+        message=f"Discount applied: {promotion.title}",
     )
 
 
@@ -231,25 +227,19 @@ async def get_promotion(promotion_id: int, db: AsyncSession = Depends(get_db_ses
 
     stmt = (
         select(Promotion)
-        .options(
-            selectinload(Promotion.restaurant),
-            selectinload(Promotion.dishes)
-        )
+        .options(selectinload(Promotion.restaurant), selectinload(Promotion.dishes))
         .where(Promotion.id == promotion_id)
     )
     result = await db.execute(stmt)
     promotion = result.scalar_one_or_none()
 
     if not promotion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promotion not found")
 
     if not promotion.restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant is currently inactive"
+            detail="Restaurant is currently inactive",
         )
 
     return PromotionResponse.model_validate(promotion)
@@ -261,7 +251,7 @@ async def get_promotion(promotion_id: int, db: AsyncSession = Depends(get_db_ses
 @router.post("/", response_model=PromotionResponse)
 async def create_promotion(
     promotion_data: PromotionCreate,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create promotion (Manager/Admin only)."""
@@ -270,23 +260,20 @@ async def create_promotion(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can create promotions"
+            detail="Only managers and admins can create promotions",
         )
 
     # Check if user can create promotions for this restaurant
     if current_user.role != "ADMIN" and current_user.restaurantId != promotion_data.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only create promotions for your own restaurant"
+            detail="You can only create promotions for your own restaurant",
         )
 
     # Validate restaurant exists
     restaurant = await db.get(Restaurant, promotion_data.restaurantId)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     # Validate dishes if provided
     dish_objects = []
@@ -297,7 +284,7 @@ async def create_promotion(
             .join(Menu, MenuCategory.menuId == Menu.id)
             .where(
                 Dish.id.in_(promotion_data.dishIds),
-                Menu.restaurantId == promotion_data.restaurantId
+                Menu.restaurantId == promotion_data.restaurantId,
             )
         )
         result = await db.execute(stmt)
@@ -306,7 +293,7 @@ async def create_promotion(
         if len(dish_objects) != len(promotion_data.dishIds):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Some dishes don't exist or don't belong to this restaurant"
+                detail="Some dishes don't exist or don't belong to this restaurant",
             )
 
     try:
@@ -324,7 +311,7 @@ async def create_promotion(
             endDate=promotion_data.endDate,
             maxUses=promotion_data.maxUses,
             currentUses=0,
-            isActive=True
+            isActive=True,
         )
 
         db.add(promotion)
@@ -339,10 +326,7 @@ async def create_promotion(
         # Fetch complete promotion
         stmt = (
             select(Promotion)
-            .options(
-                selectinload(Promotion.restaurant),
-                selectinload(Promotion.dishes)
-            )
+            .options(selectinload(Promotion.restaurant), selectinload(Promotion.dishes))
             .where(Promotion.id == promotion.id)
         )
         result = await db.execute(stmt)
@@ -353,32 +337,29 @@ async def create_promotion(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creating promotion: {str(e)}"
+            detail=f"Error creating promotion: {str(e)}",
         )
 
 
-@router.get("/management/restaurant/{restaurant_id}", response_model=List[PromotionListResponse])
+@router.get("/management/restaurant/{restaurant_id}", response_model=list[PromotionListResponse])
 async def get_restaurant_promotions_management(
     restaurant_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = Query(False),
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant promotions for management (Staff only)."""
 
     # Check permissions
     if current_user.role not in ["ADMIN", "MANAGER", "WAITER"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view promotions for your own restaurant"
+            detail="You can only view promotions for your own restaurant",
         )
 
     # Build where clause
@@ -386,18 +367,17 @@ async def get_restaurant_promotions_management(
 
     if active_only:
         current_time = datetime.now()
-        conditions.extend([
-            Promotion.isActive == True,
-            Promotion.startDate <= current_time,
-            Promotion.endDate >= current_time
-        ])
+        conditions.extend(
+            [
+                Promotion.isActive == True,
+                Promotion.startDate <= current_time,
+                Promotion.endDate >= current_time,
+            ]
+        )
 
     stmt = (
         select(Promotion)
-        .options(
-            selectinload(Promotion.restaurant),
-            selectinload(Promotion.dishes)
-        )
+        .options(selectinload(Promotion.restaurant), selectinload(Promotion.dishes))
         .where(and_(*conditions))
         .offset(skip)
         .limit(limit)
@@ -422,7 +402,7 @@ async def get_restaurant_promotions_management(
 async def update_promotion(
     promotion_id: int,
     promotion_update: PromotionUpdate,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update promotion (Manager/Admin only)."""
@@ -431,22 +411,19 @@ async def update_promotion(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can update promotions"
+            detail="Only managers and admins can update promotions",
         )
 
     # Check if promotion exists
     promotion = await db.get(Promotion, promotion_id)
     if not promotion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promotion not found")
 
     # Check permissions for restaurant
     if current_user.role != "ADMIN" and current_user.restaurantId != promotion.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update promotions for your own restaurant"
+            detail="You can only update promotions for your own restaurant",
         )
 
     # Map update fields
@@ -485,7 +462,7 @@ async def update_promotion(
                     .join(Menu, MenuCategory.menuId == Menu.id)
                     .where(
                         Dish.id.in_(promotion_update.dishIds),
-                        Menu.restaurantId == promotion.restaurantId
+                        Menu.restaurantId == promotion.restaurantId,
                     )
                 )
                 result = await db.execute(stmt)
@@ -494,7 +471,7 @@ async def update_promotion(
                 if len(dishes) != len(promotion_update.dishIds):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Some dishes don't exist or don't belong to this restaurant"
+                        detail="Some dishes don't exist or don't belong to this restaurant",
                     )
 
                 promotion.dishes = dishes
@@ -507,10 +484,7 @@ async def update_promotion(
         # Fetch complete updated promotion
         stmt = (
             select(Promotion)
-            .options(
-                selectinload(Promotion.restaurant),
-                selectinload(Promotion.dishes)
-            )
+            .options(selectinload(Promotion.restaurant), selectinload(Promotion.dishes))
             .where(Promotion.id == promotion_id)
         )
         result = await db.execute(stmt)
@@ -523,14 +497,14 @@ async def update_promotion(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating promotion: {str(e)}"
+            detail=f"Error updating promotion: {str(e)}",
         )
 
 
 @router.delete("/{promotion_id}")
 async def delete_promotion(
     promotion_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Delete promotion (Manager/Admin only)."""
@@ -539,22 +513,19 @@ async def delete_promotion(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can delete promotions"
+            detail="Only managers and admins can delete promotions",
         )
 
     # Check if promotion exists
     promotion = await db.get(Promotion, promotion_id)
     if not promotion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promotion not found")
 
     # Check permissions for restaurant
     if current_user.role != "ADMIN" and current_user.restaurantId != promotion.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only delete promotions for your own restaurant"
+            detail="You can only delete promotions for your own restaurant",
         )
 
     try:
@@ -565,37 +536,34 @@ async def delete_promotion(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error deleting promotion: {str(e)}"
+            detail=f"Error deleting promotion: {str(e)}",
         )
 
 
 @router.post("/{promotion_id}/increment-usage")
 async def increment_promotion_usage(
     promotion_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Increment promotion usage count (Staff only - when processing orders)."""
 
     promotion = await db.get(Promotion, promotion_id)
     if not promotion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promotion not found")
 
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != promotion.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only modify promotions for your own restaurant"
+            detail="You can only modify promotions for your own restaurant",
         )
 
     # Check if promotion has usage limit
     if promotion.maxUses and promotion.currentUses >= promotion.maxUses:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Promotion usage limit already reached"
+            detail="Promotion usage limit already reached",
         )
 
     try:
@@ -606,11 +574,11 @@ async def increment_promotion_usage(
         return {
             "message": "Promotion usage incremented",
             "currentUses": promotion.currentUses,
-            "maxUses": promotion.maxUses
+            "maxUses": promotion.maxUses,
         }
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error incrementing promotion usage: {str(e)}"
+            detail=f"Error incrementing promotion usage: {str(e)}",
         )

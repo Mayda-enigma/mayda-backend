@@ -12,19 +12,19 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-minimum-ok")
 os.environ.setdefault("ENVIRONMENT", "test")
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.jwt import create_access_token, get_password_hash
 from app.core.database import get_db_session
-from app.middleware.roles import get_current_user, get_current_staff_user
-
+from app.middleware.roles import get_current_user
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy mock helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_scalars(items: list):
     """Return an object that mimics the chain `.scalars().all()` → items."""
@@ -74,6 +74,7 @@ def _make_mock_user(
 
 class _MockModel:
     """A simple object whose __dict__ works like a SQLAlchemy model instance."""
+
     pass
 
 
@@ -187,9 +188,7 @@ async def client(mock_db: MagicMock):
         patch("app.core.database.disconnect_db", new_callable=AsyncMock),
         patch("app.middleware.auth.get_db", new=AsyncMock(return_value=mock_db)),
     ):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             yield ac, mock_db
 
     app.dependency_overrides.clear()

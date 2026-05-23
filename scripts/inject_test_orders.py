@@ -5,20 +5,29 @@ Run this script to create sample orders that you can use to test the payment fun
 """
 
 import asyncio
-import sys
 import os
+import sys
 import uuid
 from datetime import datetime
 
 # Add the parent directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import select, delete as sa_delete
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
-from app.models.sqlalchemy_models import Restaurant, User, Dish, Order, OrderItem, MenuCategory, Menu
 from app.models.order import OrderStatus, OrderType
+from app.models.sqlalchemy_models import (
+    Dish,
+    Menu,
+    MenuCategory,
+    Order,
+    OrderItem,
+    Restaurant,
+    User,
+)
 from app.models.user import UserRole
 
 
@@ -33,9 +42,7 @@ async def inject_test_orders():
             print("🔗 Connected to database successfully")
 
             # Get or create a test restaurant
-            result = await db.execute(
-                select(Restaurant).where(Restaurant.isActive == True)
-            )
+            result = await db.execute(select(Restaurant).where(Restaurant.isActive == True))
             restaurant = result.scalar_one_or_none()
 
             if not restaurant:
@@ -45,9 +52,7 @@ async def inject_test_orders():
             print(f"🏪 Using restaurant: {restaurant.name} (ID: {restaurant.id})")
 
             # Get or create a test user
-            result = await db.execute(
-                select(User).where(User.role == UserRole.CLIENT)
-            )
+            result = await db.execute(select(User).where(User.role == UserRole.CLIENT))
             test_user = result.scalar_one_or_none()
 
             if not test_user:
@@ -58,7 +63,7 @@ async def inject_test_orders():
                     lastName="Client",
                     password="$2b$12$test.hash.for.testing.only",
                     role=UserRole.CLIENT.value,
-                    isActive=True
+                    isActive=True,
                 )
                 db.add(test_user)
                 await db.commit()
@@ -89,26 +94,26 @@ async def inject_test_orders():
                     "type": OrderType.DINE_IN,
                     "subtotal": 2500.0,
                     "total": 2500.0,
-                    "notes": "Test order for payment API - Dine In"
+                    "notes": "Test order for payment API - Dine In",
                 },
                 {
                     "type": OrderType.TAKEAWAY,
                     "subtotal": 1800.0,
                     "total": 1800.0,
-                    "notes": "Test order for payment API - Takeaway"
+                    "notes": "Test order for payment API - Takeaway",
                 },
                 {
                     "type": OrderType.DELIVERY,
                     "subtotal": 3200.0,
                     "deliveryFee": 300.0,
                     "total": 3500.0,
-                    "notes": "Test order for payment API - Delivery"
-                }
+                    "notes": "Test order for payment API - Delivery",
+                },
             ]
 
             created_orders = []
 
-            for i, order_data in enumerate(test_orders):
+            for _, order_data in enumerate(test_orders):
                 # Generate unique order number
                 order_number = f"TEST{datetime.now().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
 
@@ -125,7 +130,7 @@ async def inject_test_orders():
                     totalAmount=order_data["total"],
                     paymentStatus="PENDING",
                     notes=order_data["notes"],
-                    confirmedAt=datetime.now()
+                    confirmedAt=datetime.now(),
                 )
                 db.add(order)
                 await db.commit()
@@ -143,14 +148,16 @@ async def inject_test_orders():
                         quantity=quantity,
                         unitPrice=unit_price,
                         totalPrice=total_price,
-                        notes=f"Test item {j+1}"
+                        notes=f"Test item {j + 1}",
                     )
                     db.add(item)
                     await db.commit()
                     await db.refresh(item)
 
                 created_orders.append(order)
-                print(f"✅ Created test order: {order.orderNumber} (ID: {order.id}) - {order_data['type'].value} - ${order_data['total']}")
+                print(
+                    f"✅ Created test order: {order.orderNumber} (ID: {order.id}) - {order_data['type'].value} - ${order_data['total']}"  # noqa: E501
+                )
 
             print(f"\n🎉 Successfully created {len(created_orders)} test orders!")
             print("\n📝 Test Order Details:")
@@ -182,6 +189,7 @@ async def inject_test_orders():
     except Exception as e:
         print(f"❌ Error creating test orders: {e}")
         import traceback
+
         traceback.print_exc()
     finally:
         await engine.dispose()
@@ -195,16 +203,12 @@ async def clean_test_orders():
     try:
         async with async_session() as db:
             # Count test orders first
-            result = await db.execute(
-                select(Order).where(Order.orderNumber.startswith("TEST"))
-            )
+            result = await db.execute(select(Order).where(Order.orderNumber.startswith("TEST")))
             test_orders = result.scalars().all()
             count = len(test_orders)
 
             # Delete them
-            await db.execute(
-                sa_delete(Order).where(Order.orderNumber.startswith("TEST"))
-            )
+            await db.execute(sa_delete(Order).where(Order.orderNumber.startswith("TEST")))
             await db.commit()
 
             print(f"🧹 Cleaned up {count} test orders")

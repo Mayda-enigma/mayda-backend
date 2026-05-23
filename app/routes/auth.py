@@ -1,24 +1,36 @@
-from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update as sa_update
-from app.models.sqlalchemy_models import User, RefreshToken
-from app.models.auth import (
-    UserLogin, UserRegister, TokenResponse, RefreshTokenRequest, 
-    PasswordChange, UserResponse, UserUpdate, StaffLogin, 
-    TempTokenResponse, OtpVerificationRequest
-)
+
 from app.auth.jwt import (
-    verify_password, get_password_hash, create_access_token, 
-    create_refresh_token, verify_token, create_temp_token, verify_temp_token
+    create_access_token,
+    create_refresh_token,
+    create_temp_token,
+    get_password_hash,
+    verify_password,
+    verify_temp_token,
+    verify_token,
 )
-from app.utils.sms_service import SMSService
 from app.core.config import settings
 from app.core.database import get_db_session
-from app.middleware.roles import (
-    get_current_user, get_current_admin_user
+from app.middleware.roles import get_current_admin_user, get_current_user
+from app.models.auth import (
+    OtpVerificationRequest,
+    PasswordChange,
+    RefreshTokenRequest,
+    StaffLogin,
+    TempTokenResponse,
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+    UserUpdate,
 )
-
+from app.models.sqlalchemy_models import RefreshToken, User
+from app.utils.sms_service import SMSService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -38,13 +50,13 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_se
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email or phone already exists"
+            detail="User with this email or phone already exists",
         )
 
     if user_data.role.value in ["WAITER", "CHEF", "MANAGER"] and not user_data.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Restaurant ID is required for staff roles"
+            detail="Restaurant ID is required for staff roles",
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -56,7 +68,7 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_se
         lastName=user_data.lastName,
         password=hashed_password,
         role=user_data.role.value,
-        restaurantId=user_data.restaurantId
+        restaurantId=user_data.restaurantId,
     )
     db.add(user)
     await db.commit()
@@ -74,20 +86,14 @@ async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_s
     if not user or not verify_password(user_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect phone or password"
+            detail="Incorrect phone or password",
         )
 
     if not user.isActive:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is inactive")
 
     if user.role not in ["WAITER", "CHEF", "MANAGER", "ADMIN"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Staff access only"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access only")
 
     sms_service = SMSService()
     otp_result = await sms_service.send_otp(user.id, str(user.phone), "STAFF_AUTH")
@@ -95,7 +101,7 @@ async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_s
     if not otp_result.get("success", False):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send OTP"
+            detail="Failed to send OTP",
         )
 
     temp_token = create_temp_token(user.id, "2fa")
@@ -103,7 +109,7 @@ async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_s
     return TempTokenResponse(
         tempToken=temp_token,
         message="OTP sent to your phone. Please verify to complete login.",
-        expiresIn=300
+        expiresIn=300,
     )
 
 
@@ -114,7 +120,7 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSessio
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired temporary token"
+            detail="Invalid or expired temporary token",
         )
 
     user_id = int(payload.get("sub"))
@@ -123,17 +129,11 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSessio
     otp_valid = await sms_service.verify_otp(user_id, otp_data.otpCode, "STAFF_AUTH")
 
     if not otp_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired OTP"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP")
 
     user = await db.get(User, user_id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -148,7 +148,7 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSessio
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user),
     )
 
 
@@ -166,14 +166,11 @@ async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db_session)
     if not user or not verify_password(user_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email/phone or password"
+            detail="Incorrect email/phone or password",
         )
 
     if not user.isActive:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is inactive")
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
@@ -188,7 +185,7 @@ async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db_session)
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user),
     )
 
 
@@ -197,23 +194,17 @@ async def refresh_token(token_data: RefreshTokenRequest, db: AsyncSession = Depe
 
     payload = verify_token(token_data.refresh_token, token_type="refresh")
     if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.token == token_data.refresh_token,
             RefreshToken.userId == int(user_id),
-            RefreshToken.isRevoked == False
+            RefreshToken.isRevoked == False,
         )
     )
     stored_token = result.scalar_one_or_none()
@@ -221,14 +212,14 @@ async def refresh_token(token_data: RefreshTokenRequest, db: AsyncSession = Depe
     if not stored_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token not found or revoked"
+            detail="Refresh token not found or revoked",
         )
 
     user = await db.get(User, int(user_id))
     if not user or not user.isActive:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive"
+            detail="User not found or inactive",
         )
 
     new_access_token = create_access_token(data={"sub": str(user.id)})
@@ -248,19 +239,23 @@ async def refresh_token(token_data: RefreshTokenRequest, db: AsyncSession = Depe
         access_token=new_access_token,
         refresh_token=new_refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user),
     )
 
 
 @router.post("/logout")
-async def logout(token_data: RefreshTokenRequest, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db_session)):
+async def logout(
+    token_data: RefreshTokenRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
 
     await db.execute(
         sa_update(RefreshToken)
         .where(
             RefreshToken.token == token_data.refresh_token,
             RefreshToken.userId == current_user.id,
-            RefreshToken.isRevoked == False
+            RefreshToken.isRevoked == False,
         )
         .values(isRevoked=True)
     )
@@ -274,10 +269,7 @@ async def logout_all(current_user=Depends(get_current_user), db: AsyncSession = 
 
     await db.execute(
         sa_update(RefreshToken)
-        .where(
-            RefreshToken.userId == current_user.id,
-            RefreshToken.isRevoked == False
-        )
+        .where(RefreshToken.userId == current_user.id, RefreshToken.isRevoked == False)
         .values(isRevoked=True)
     )
     await db.commit()
@@ -292,7 +284,7 @@ async def get_current_user_info(current_user=Depends(get_current_user), db: Asyn
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
-    user_update: UserUpdate, 
+    user_update: UserUpdate,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -300,15 +292,10 @@ async def update_current_user(
     update_data = {}
 
     if user_update.email is not None:
-        result = await db.execute(
-            select(User).where(User.email == user_update.email, User.id != current_user.id)
-        )
+        result = await db.execute(select(User).where(User.email == user_update.email, User.id != current_user.id))
         existing_user = result.scalar_one_or_none()
         if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already taken"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already taken")
         update_data["email"] = user_update.email
 
     if user_update.firstName is not None:
@@ -318,14 +305,12 @@ async def update_current_user(
         update_data["lastName"] = user_update.lastName
 
     if user_update.phone is not None:
-        result = await db.execute(
-            select(User).where(User.phone == user_update.phone, User.id != current_user.id)
-        )
+        result = await db.execute(select(User).where(User.phone == user_update.phone, User.id != current_user.id))
         existing_user = result.scalar_one_or_none()
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already taken"
+                detail="Phone number already taken",
             )
         update_data["phone"] = user_update.phone
 
@@ -338,10 +323,7 @@ async def update_current_user(
             update_data["restaurantId"] = user_update.restaurantId
 
     if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid fields to update"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid fields to update")
 
     updated_user = await db.get(User, current_user.id)
     for key, value in update_data.items():
@@ -360,10 +342,7 @@ async def change_password(
 ):
 
     if not verify_password(password_data.current_password, current_user.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect current password"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
 
     hashed_password = get_password_hash(password_data.new_password)
 
@@ -374,10 +353,7 @@ async def change_password(
 
     await db.execute(
         sa_update(RefreshToken)
-        .where(
-            RefreshToken.userId == current_user.id,
-            RefreshToken.isRevoked == False
-        )
+        .where(RefreshToken.userId == current_user.id, RefreshToken.isRevoked == False)
         .values(isRevoked=True)
     )
     await db.commit()
@@ -386,7 +362,10 @@ async def change_password(
 
 
 @router.get("/users", response_model=list[UserResponse])
-async def get_all_users(current_user=Depends(get_current_admin_user), db: AsyncSession = Depends(get_db_session)):
+async def get_all_users(
+    current_user=Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
 
     result = await db.execute(select(User).order_by(User.createdAt.desc()))
     users = result.scalars().all()
@@ -404,23 +383,15 @@ async def update_user(
 
     user = await db.get(User, user_id)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     update_data = {}
 
     if user_update.email is not None:
-        result = await db.execute(
-            select(User).where(User.email == user_update.email, User.id != user_id)
-        )
+        result = await db.execute(select(User).where(User.email == user_update.email, User.id != user_id))
         existing_user = result.scalar_one_or_none()
         if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already taken"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already taken")
         update_data["email"] = user_update.email
 
     if user_update.firstName is not None:
@@ -430,14 +401,12 @@ async def update_user(
         update_data["lastName"] = user_update.lastName
 
     if user_update.phone is not None:
-        result = await db.execute(
-            select(User).where(User.phone == user_update.phone, User.id != user_id)
-        )
+        result = await db.execute(select(User).where(User.phone == user_update.phone, User.id != user_id))
         existing_user = result.scalar_one_or_none()
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone number already taken"
+                detail="Phone number already taken",
             )
         update_data["phone"] = user_update.phone
 
@@ -451,10 +420,7 @@ async def update_user(
         update_data["restaurantId"] = user_update.restaurantId
 
     if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid fields to update"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid fields to update")
 
     updated_user = await db.get(User, user_id)
     for key, value in update_data.items():

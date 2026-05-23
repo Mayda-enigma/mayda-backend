@@ -1,15 +1,14 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_user
 from app.models.notification import NotificationResponse
-from app.models.sqlalchemy_models import User, Notification
+from app.models.sqlalchemy_models import Notification, User
 from app.utils.logging import logger
-
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -20,7 +19,7 @@ async def create_restaurant_event_notifications(
     notification_type: str,
     title: str,
     body: str,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ):
     """Create manager/admin notifications for a restaurant-scoped event."""
 
@@ -31,8 +30,8 @@ async def create_restaurant_event_notifications(
                     User.isActive == True,
                     or_(
                         User.role == "ADMIN",
-                        and_(User.role == "MANAGER", User.restaurantId == restaurant_id)
-                    )
+                        and_(User.role == "MANAGER", User.restaurantId == restaurant_id),
+                    ),
                 )
             )
         )
@@ -80,9 +79,7 @@ async def mark_notification_as_read(
 ):
     """Mark a single notification as read."""
 
-    result = await db.execute(
-        select(Notification).where(Notification.id == notification_id)
-    )
+    result = await db.execute(select(Notification).where(Notification.id == notification_id))
     notification = result.scalar_one_or_none()
     if not notification or notification.userId != current_user.id:
         raise HTTPException(

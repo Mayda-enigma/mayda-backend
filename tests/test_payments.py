@@ -8,8 +8,13 @@ import pytest
 from tests.conftest import _mock_result
 
 
-def _make_mock_order(order_id=1, order_number="ORD-20240523-00000001",
-                     user_id=1, restaurant_id=1, total=100.0):
+def _make_mock_order(
+    order_id=1,
+    order_number="ORD-20240523-00000001",
+    user_id=1,
+    restaurant_id=1,
+    total=100.0,
+):
     order = MagicMock()
     order.id = order_id
     order.orderNumber = order_number
@@ -22,8 +27,7 @@ def _make_mock_order(order_id=1, order_number="ORD-20240523-00000001",
     return order
 
 
-def _make_mock_payment(payment_id=1, txn_id="guidini_txn_1",
-                       order_id=1, order=None):
+def _make_mock_payment(payment_id=1, txn_id="guidini_txn_1", order_id=1, order=None):
     p = MagicMock()
     p.id = payment_id
     p.paymentId = txn_id
@@ -45,7 +49,7 @@ async def test_initiate_payment(auth_client, mock_client_user):
             "attributes": {
                 "form_url": "https://pay.example.com/form",
                 "amount": "10000",
-            }
+            },
         }
     }
 
@@ -59,10 +63,13 @@ async def test_initiate_payment(auth_client, mock_client_user):
             status_code=200,
             json=lambda: guidini_response,
         )
-        resp = await ac.post("/api/payments/initiate", json={
-            "orderId": 1,
-            "language": "fr",
-        })
+        resp = await ac.post(
+            "/api/payments/initiate",
+            json={
+                "orderId": 1,
+                "language": "fr",
+            },
+        )
 
     assert resp.status_code == 200, resp.text
     body = resp.json()

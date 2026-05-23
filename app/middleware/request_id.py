@@ -27,9 +27,7 @@ class RequestIdMiddleware:
         request = Request(scope)
 
         # Honor the client-supplied header; generate a new UUID4 if absent.
-        request_id: str = (
-            request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
-        )
+        request_id: str = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
 
         # Attach to request state so route handlers can read it.
         request.state.request_id = request_id

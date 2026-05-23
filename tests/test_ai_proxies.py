@@ -1,12 +1,12 @@
 """Tests for the AI proxy endpoints — all upstream calls mocked with respx."""
 
-import pytest
-import respx
-import httpx
 from unittest.mock import AsyncMock, patch
 
-from tests.conftest import _mock_result
+import httpx
+import pytest
+import respx
 
+from tests.conftest import _mock_result
 
 RECOMMEND_URL = "http://recommendation:8101/recommendations"
 
@@ -26,9 +26,7 @@ async def test_recommend_proxy_success(client, client_token, mock_client_user):
         mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
         with respx.mock(assert_all_called=False) as rsp:
-            rsp.post(RECOMMEND_URL).mock(
-                return_value=httpx.Response(200, json=upstream_payload)
-            )
+            rsp.post(RECOMMEND_URL).mock(return_value=httpx.Response(200, json=upstream_payload))
 
             resp = await ac.post(
                 "/api/ai/recommend",
@@ -50,9 +48,7 @@ async def test_recommend_proxy_upstream_down(client, client_token, mock_client_u
         mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=mock_client_user)
 
         with respx.mock(assert_all_called=False) as rsp:
-            rsp.post(RECOMMEND_URL).mock(
-                side_effect=httpx.ConnectError("connection refused")
-            )
+            rsp.post(RECOMMEND_URL).mock(side_effect=httpx.ConnectError("connection refused"))
 
             resp = await ac.post(
                 "/api/ai/recommend",

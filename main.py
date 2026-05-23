@@ -1,21 +1,39 @@
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import uvicorn
 from sqlalchemy import select
 
+from app.auth.jwt import get_password_hash
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
-from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics, users
-
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
-from app.utils.logging import logger
-
-from app.auth.jwt import get_password_hash
 from app.models.sqlalchemy_models import User, UserRole
+from app.routes import (
+    admin,
+    ai,
+    analytics,
+    auth,
+    ingredients,
+    inventory,
+    loyalty,
+    menus,
+    notifications,
+    orders,
+    otp,
+    payments,
+    promotions,
+    protected,
+    reservations,
+    restaurants,
+    reviews,
+    tables,
+    users,
+)
+from app.utils.logging import logger
 
 
 async def _ensure_admin():
@@ -91,8 +109,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={
             "detail": "Internal server error",
-            "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong"
-        }
+            "message": str(exc) if settings.ENVIRONMENT == "development" else "Something went wrong",
+        },
     )
 
 
@@ -122,7 +140,7 @@ async def health_check():
     return {
         "status": "healthy",
         "message": "Caravane API is running",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
@@ -132,15 +150,9 @@ async def root():
         "message": "Welcome to Caravane Restaurant Management API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True, log_level="info")

@@ -1,6 +1,6 @@
-from pydantic import BaseModel, validator, Field
-from typing import Optional, List
 from datetime import datetime
+
+from pydantic import BaseModel, Field, validator
 
 
 class LoyaltyCardCreate(BaseModel):
@@ -12,11 +12,11 @@ class LoyaltyCardCreate(BaseModel):
 class LoyaltyCardResponse(BaseModel):
     id: int
     userId: int
-    user: Optional[dict] = None  # User details
+    user: dict | None = None  # User details
     points: int
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -27,31 +27,31 @@ class LoyaltyTransactionCreate(BaseModel):
     points: int  # Can be positive (earned) or negative (redeemed)
     type: str = Field(..., min_length=1)  # "EARNED", "REDEEMED", "BONUS", "EXPIRED"
     description: str = Field(..., min_length=1, max_length=255)
-    orderId: Optional[int] = None  # Link to order if points earned from purchase
-    
-    @validator('points')
+    orderId: int | None = None  # Link to order if points earned from purchase
+
+    @validator("points")
     def validate_points(cls, v, values):
-        if 'type' in values:
-            if values['type'] == "REDEEMED" and v > 0:
-                raise ValueError('Redeemed points must be negative')
-            elif values['type'] in ["EARNED", "BONUS"] and v <= 0:
-                raise ValueError('Earned/bonus points must be positive')
+        if "type" in values:
+            if values["type"] == "REDEEMED" and v > 0:
+                raise ValueError("Redeemed points must be negative")
+            elif values["type"] in ["EARNED", "BONUS"] and v <= 0:
+                raise ValueError("Earned/bonus points must be positive")
         return v
 
 
 class LoyaltyTransactionResponse(BaseModel):
     id: int
     loyaltyCardId: int
-    loyaltyCard: Optional[dict] = None
+    loyaltyCard: dict | None = None
     restaurantId: int
-    restaurant: Optional[dict] = None
+    restaurant: dict | None = None
     points: int
     type: str
     description: str
-    orderId: Optional[int] = None
-    order: Optional[dict] = None
+    orderId: int | None = None
+    order: dict | None = None
     createdAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -59,14 +59,14 @@ class LoyaltyTransactionResponse(BaseModel):
 class LoyaltyTransactionListResponse(BaseModel):
     id: int
     restaurantId: int
-    restaurantName: Optional[str] = None
+    restaurantName: str | None = None
     points: int
     type: str
     description: str
-    orderId: Optional[int] = None
-    orderNumber: Optional[str] = None
+    orderId: int | None = None
+    orderNumber: str | None = None
     createdAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -74,14 +74,14 @@ class LoyaltyTransactionListResponse(BaseModel):
 class PointsRedemptionRequest(BaseModel):
     restaurantId: int
     pointsToRedeem: int = Field(..., gt=0)
-    description: Optional[str] = "Points redeemed for discount"
-    
-    @validator('pointsToRedeem')
+    description: str | None = "Points redeemed for discount"
+
+    @validator("pointsToRedeem")
     def validate_points(cls, v):
         if v <= 0:
-            raise ValueError('Points to redeem must be greater than 0')
+            raise ValueError("Points to redeem must be greater than 0")
         if v % 10 != 0:  # Points usually redeemed in multiples of 10
-            raise ValueError('Points must be redeemed in multiples of 10')
+            raise ValueError("Points must be redeemed in multiples of 10")
         return v
 
 
@@ -97,11 +97,11 @@ class PointsEarnedRequest(BaseModel):
     orderId: int
     restaurantId: int
     orderAmount: float
-    
-    @validator('orderAmount')
+
+    @validator("orderAmount")
     def validate_amount(cls, v):
         if v <= 0:
-            raise ValueError('Order amount must be greater than 0')
+            raise ValueError("Order amount must be greater than 0")
         return v
 
 
@@ -116,8 +116,8 @@ class LoyaltyStatsResponse(BaseModel):
     pointsEarned: int
     pointsRedeemed: int
     transactionCount: int
-    favoriteRestaurants: List[dict]  # Top restaurants by points earned
-    recentTransactions: List[LoyaltyTransactionListResponse]
+    favoriteRestaurants: list[dict]  # Top restaurants by points earned
+    recentTransactions: list[LoyaltyTransactionListResponse]
 
 
 class RestaurantLoyaltyStatsResponse(BaseModel):
@@ -127,8 +127,8 @@ class RestaurantLoyaltyStatsResponse(BaseModel):
     totalPointsGiven: int
     totalPointsRedeemed: int
     averagePointsPerCustomer: float
-    topCustomers: List[dict]  # Customers with most points
-    recentTransactions: List[LoyaltyTransactionListResponse]
+    topCustomers: list[dict]  # Customers with most points
+    recentTransactions: list[LoyaltyTransactionListResponse]
 
 
 class LoyaltyProgramInfo(BaseModel):

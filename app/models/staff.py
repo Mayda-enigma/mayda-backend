@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -8,7 +7,7 @@ from app.models.user import UserRole
 
 class StaffResponse(BaseModel):
     id: int
-    email: Optional[str]
+    email: str | None
     phone: int
     firstName: str
     lastName: str
@@ -16,7 +15,7 @@ class StaffResponse(BaseModel):
     isActive: bool
     createdAt: datetime
     updatedAt: datetime
-    restaurantId: Optional[int]
+    restaurantId: int | None
 
     class Config:
         from_attributes = True
@@ -33,7 +32,7 @@ class StaffInviteRequest(BaseModel):
     firstName: str = Field(..., min_length=1, max_length=100)
     lastName: str = Field(..., min_length=1, max_length=100)
     phone: int
-    email: Optional[EmailStr] = None
+    email: EmailStr | None = None
     role: UserRole
 
 
@@ -44,5 +43,5 @@ class StaffInviteResponse(BaseModel):
 
 
 class StaffUpdate(BaseModel):
-    role: Optional[UserRole] = None
-    isActive: Optional[bool] = None
+    role: UserRole | None = None
+    isActive: bool | None = None

@@ -1,31 +1,35 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Optional
 from datetime import datetime, timedelta
-from app.models.inventory import (
-    InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
-    InventoryStockUpdate, InventoryStockUpdateResponse, InventoryStatsResponse,
-    InventoryLowStockAlert, InventoryCategoryResponse,
-    InventorySupplierResponse
-)
-from app.middleware.roles import (
-    get_current_staff_user
-)
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, update as sa_update, delete as sa_delete
-from sqlalchemy.orm import selectinload
-from app.core.database import get_db_session
-from app.models.sqlalchemy_models import Inventory, Ingredient, Restaurant, Dish
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.database import get_db_session
+from app.middleware.roles import get_current_staff_user
+from app.models.inventory import (
+    InventoryCategoryResponse,
+    InventoryItemCreate,
+    InventoryItemResponse,
+    InventoryItemUpdate,
+    InventoryLowStockAlert,
+    InventoryStatsResponse,
+    InventoryStockUpdate,
+    InventoryStockUpdateResponse,
+    InventorySupplierResponse,
+)
+from app.models.sqlalchemy_models import Inventory, Restaurant
 
 router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 
 
 # ==================== INVENTORY ITEMS CRUD ====================
 
+
 @router.post("/items", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
 async def create_inventory_item(
     item_data: InventoryItemCreate,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create new inventory item (Manager/Admin only)."""
@@ -34,14 +38,14 @@ async def create_inventory_item(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can create inventory items"
+            detail="Only managers and admins can create inventory items",
         )
 
     # Check if user can manage this restaurant's inventory
     if current_user.role != "ADMIN" and current_user.restaurantId != item_data.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only manage inventory for your own restaurant"
+            detail="You can only manage inventory for your own restaurant",
         )
 
     # Validate restaurant exists
@@ -49,7 +53,7 @@ async def create_inventory_item(
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found or inactive"
+            detail="Restaurant not found or inactive",
         )
 
     # Check if item with same name already exists in this restaurant
@@ -58,7 +62,7 @@ async def create_inventory_item(
             select(Inventory).where(
                 Inventory.restaurantId == item_data.restaurantId,
                 Inventory.name == item_data.name,
-                Inventory.isActive == True
+                Inventory.isActive == True,
             )
         )
     ).scalar_one_or_none()
@@ -66,7 +70,7 @@ async def create_inventory_item(
     if existing_item:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Inventory item '{item_data.name}' already exists in this restaurant"
+            detail=f"Inventory item '{item_data.name}' already exists in this restaurant",
         )
 
     try:
@@ -85,7 +89,7 @@ async def create_inventory_item(
             unitPrice=item_data.unitPrice,
             supplier=item_data.supplier,
             location=item_data.location,
-            expiryDate=item_data.expiryDate
+            expiryDate=item_data.expiryDate,
         )
         db.add(inventory_item)
         await db.commit()
@@ -108,22 +112,22 @@ async def create_inventory_item(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creating inventory item: {str(e)}"
+            detail=f"Error creating inventory item: {str(e)}",
         )
 
 
-@router.get("/items", response_model=List[InventoryItemResponse])
+@router.get("/items", response_model=list[InventoryItemResponse])
 async def get_inventory_items(
     restaurant_id: int = Query(...),
-    category: Optional[str] = Query(None),
-    supplier: Optional[str] = Query(None),
-    location: Optional[str] = Query(None),
+    category: str | None = Query(None),
+    supplier: str | None = Query(None),
+    location: str | None = Query(None),
     low_stock_only: bool = Query(False),
     expiring_soon: bool = Query(False),
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get inventory items with filters (Staff only)."""
@@ -132,13 +136,13 @@ async def get_inventory_items(
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view inventory for your own restaurant"
+            detail="You can only view inventory for your own restaurant",
         )
 
     # Build where clause
     conditions = [
         Inventory.restaurantId == restaurant_id,
-        Inventory.isActive == is_active
+        Inventory.isActive == is_active,
     ]
 
     if category:
@@ -186,14 +190,14 @@ async def get_inventory_items(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching inventory items: {str(e)}"
+            detail=f"Error fetching inventory items: {str(e)}",
         )
 
 
 @router.get("/items/{item_id}", response_model=InventoryItemResponse)
 async def get_inventory_item(
     item_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get single inventory item (Staff only)."""
@@ -205,16 +209,13 @@ async def get_inventory_item(
     inventory_item = result.scalar_one_or_none()
 
     if not inventory_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
 
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != inventory_item.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view inventory items from your own restaurant"
+            detail="You can only view inventory items from your own restaurant",
         )
 
     # Format response
@@ -230,7 +231,7 @@ async def get_inventory_item(
 async def update_inventory_item(
     item_id: int,
     item_data: InventoryItemUpdate,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update inventory item (Manager/Admin only)."""
@@ -239,23 +240,20 @@ async def update_inventory_item(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can update inventory items"
+            detail="Only managers and admins can update inventory items",
         )
 
     # Get inventory item
     inventory_item = await db.get(Inventory, item_id)
 
     if not inventory_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
 
     # Check if user can manage this restaurant's inventory
     if current_user.role != "ADMIN" and current_user.restaurantId != inventory_item.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update inventory items from your own restaurant"
+            detail="You can only update inventory items from your own restaurant",
         )
 
     # Prepare update data
@@ -265,10 +263,7 @@ async def update_inventory_item(
             update_data[field] = value
 
     if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No fields to update"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
     try:
         # Update inventory item
@@ -294,14 +289,14 @@ async def update_inventory_item(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating inventory item: {str(e)}"
+            detail=f"Error updating inventory item: {str(e)}",
         )
 
 
 @router.delete("/items/{item_id}")
 async def delete_inventory_item(
     item_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Delete (deactivate) inventory item (Manager/Admin only)."""
@@ -310,23 +305,20 @@ async def delete_inventory_item(
     if current_user.role not in ["ADMIN", "MANAGER"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only managers and admins can delete inventory items"
+            detail="Only managers and admins can delete inventory items",
         )
 
     # Get inventory item
     inventory_item = await db.get(Inventory, item_id)
 
     if not inventory_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
 
     # Check if user can manage this restaurant's inventory
     if current_user.role != "ADMIN" and current_user.restaurantId != inventory_item.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only delete inventory items from your own restaurant"
+            detail="You can only delete inventory items from your own restaurant",
         )
 
     try:
@@ -339,16 +331,17 @@ async def delete_inventory_item(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error deleting inventory item: {str(e)}"
+            detail=f"Error deleting inventory item: {str(e)}",
         )
 
 
 # ==================== STOCK MANAGEMENT ====================
 
+
 @router.post("/stock/update", response_model=InventoryStockUpdateResponse)
 async def update_stock_quantity(
     stock_update: InventoryStockUpdate,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update stock quantity (add/consume stock) (Staff only)."""
@@ -357,16 +350,13 @@ async def update_stock_quantity(
     inventory_item = await db.get(Inventory, stock_update.itemId)
 
     if not inventory_item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory item not found")
 
     # Check permissions
     if current_user.role != "ADMIN" and current_user.restaurantId != inventory_item.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update stock for your own restaurant's inventory"
+            detail="You can only update stock for your own restaurant's inventory",
         )
 
     # Calculate new stock quantity
@@ -376,7 +366,7 @@ async def update_stock_quantity(
     if new_stock < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient stock. Current: {inventory_item.currentStock}, Requested change: {stock_update.quantityChange}"
+            detail=f"Insufficient stock. Current: {inventory_item.currentStock}, Requested change: {stock_update.quantityChange}",  # noqa: E501
         )
 
     try:
@@ -392,20 +382,20 @@ async def update_stock_quantity(
             previousStock=inventory_item.currentStock - stock_update.quantityChange,
             newStock=new_stock,
             quantityChanged=stock_update.quantityChange,
-            message=f"{action} {abs(stock_update.quantityChange)} {inventory_item.unit} of {inventory_item.name}. Reason: {stock_update.reason}"
+            message=f"{action} {abs(stock_update.quantityChange)} {inventory_item.unit} of {inventory_item.name}. Reason: {stock_update.reason}",  # noqa: E501
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating stock: {str(e)}"
+            detail=f"Error updating stock: {str(e)}",
         )
 
 
-@router.get("/low-stock-alerts/{restaurant_id}", response_model=List[InventoryLowStockAlert])
+@router.get("/low-stock-alerts/{restaurant_id}", response_model=list[InventoryLowStockAlert])
 async def get_low_stock_alerts(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get low stock alerts for restaurant (Staff only)."""
@@ -414,16 +404,13 @@ async def get_low_stock_alerts(
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view alerts for your own restaurant"
+            detail="You can only view alerts for your own restaurant",
         )
 
     try:
         # Get items where current stock <= minimum stock
         result = await db.execute(
-            select(Inventory).where(
-                Inventory.restaurantId == restaurant_id,
-                Inventory.isActive == True
-            )
+            select(Inventory).where(Inventory.restaurantId == restaurant_id, Inventory.isActive == True)
         )
         low_stock_items = result.scalars().all()
 
@@ -438,16 +425,17 @@ async def get_low_stock_alerts(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching low stock alerts: {str(e)}"
+            detail=f"Error fetching low stock alerts: {str(e)}",
         )
 
 
 # ==================== ANALYTICS & REPORTING ====================
 
+
 @router.get("/stats/{restaurant_id}", response_model=InventoryStatsResponse)
 async def get_inventory_stats(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get inventory statistics for restaurant (Staff only)."""
@@ -456,23 +444,18 @@ async def get_inventory_stats(
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view stats for your own restaurant"
+            detail="You can only view stats for your own restaurant",
         )
 
     # Get restaurant name
     restaurant = await db.get(Restaurant, restaurant_id)
 
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     try:
         # Get all inventory items
-        result = await db.execute(
-            select(Inventory).where(Inventory.restaurantId == restaurant_id)
-        )
+        result = await db.execute(select(Inventory).where(Inventory.restaurantId == restaurant_id))
         all_items = result.scalars().all()
 
         active_items = [item for item in all_items if item.isActive]
@@ -481,7 +464,8 @@ async def get_inventory_stats(
         # Items expiring in next 7 days
         expiry_threshold = datetime.now() + timedelta(days=7)
         expiring_soon_items = [
-            item for item in active_items
+            item
+            for item in active_items
             if item.expiryDate and item.expiryDate <= expiry_threshold and item.expiryDate >= datetime.now()
         ]
 
@@ -503,20 +487,20 @@ async def get_inventory_stats(
             averageItemValue=round(average_item_value, 2),
             expiringSoonItems=len(expiring_soon_items),
             categoriesCount=len(categories),
-            suppliersCount=len(suppliers)
+            suppliersCount=len(suppliers),
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error calculating inventory stats: {str(e)}"
+            detail=f"Error calculating inventory stats: {str(e)}",
         )
 
 
-@router.get("/categories/{restaurant_id}", response_model=List[InventoryCategoryResponse])
+@router.get("/categories/{restaurant_id}", response_model=list[InventoryCategoryResponse])
 async def get_inventory_by_category(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get inventory breakdown by category (Staff only)."""
@@ -525,16 +509,13 @@ async def get_inventory_by_category(
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view categories for your own restaurant"
+            detail="You can only view categories for your own restaurant",
         )
 
     try:
         # Get all active inventory items
         result = await db.execute(
-            select(Inventory).where(
-                Inventory.restaurantId == restaurant_id,
-                Inventory.isActive == True
-            )
+            select(Inventory).where(Inventory.restaurantId == restaurant_id, Inventory.isActive == True)
         )
         items = result.scalars().all()
 
@@ -548,7 +529,7 @@ async def get_inventory_by_category(
                     "category": category,
                     "itemCount": 0,
                     "totalValue": 0,
-                    "lowStockCount": 0
+                    "lowStockCount": 0,
                 }
 
             category_data[category]["itemCount"] += 1
@@ -568,14 +549,14 @@ async def get_inventory_by_category(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching category breakdown: {str(e)}"
+            detail=f"Error fetching category breakdown: {str(e)}",
         )
 
 
-@router.get("/suppliers/{restaurant_id}", response_model=List[InventorySupplierResponse])
+@router.get("/suppliers/{restaurant_id}", response_model=list[InventorySupplierResponse])
 async def get_inventory_by_supplier(
     restaurant_id: int,
-    current_user = Depends(get_current_staff_user),
+    current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get inventory breakdown by supplier (Staff only)."""
@@ -584,16 +565,13 @@ async def get_inventory_by_supplier(
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only view suppliers for your own restaurant"
+            detail="You can only view suppliers for your own restaurant",
         )
 
     try:
         # Get all active inventory items
         result = await db.execute(
-            select(Inventory).where(
-                Inventory.restaurantId == restaurant_id,
-                Inventory.isActive == True
-            )
+            select(Inventory).where(Inventory.restaurantId == restaurant_id, Inventory.isActive == True)
         )
         items = result.scalars().all()
 
@@ -607,7 +585,7 @@ async def get_inventory_by_supplier(
                     "supplier": supplier,
                     "itemCount": 0,
                     "totalValue": 0,
-                    "lowStockCount": 0
+                    "lowStockCount": 0,
                 }
 
             supplier_data[supplier]["itemCount"] += 1
@@ -627,5 +605,5 @@ async def get_inventory_by_supplier(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching supplier breakdown: {str(e)}"
+            detail=f"Error fetching supplier breakdown: {str(e)}",
         )

@@ -1,16 +1,22 @@
 """Comprehensive tests for reservation endpoints."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from tests.conftest import _mock_result, _make_mock_restaurant, _make_mock_table
+from tests.conftest import _make_mock_restaurant, _make_mock_table, _mock_result
 
 
 def _make_mock_reservation(
-    reservation_id=1, user_id=1, table_id=1, restaurant_id=1,
-    status="PENDING", user=None, table=None, restaurant=None,
+    reservation_id=1,
+    user_id=1,
+    table_id=1,
+    restaurant_id=1,
+    status="PENDING",
+    user=None,
+    table=None,
+    restaurant=None,
 ):
     r = MagicMock()
     r.id = reservation_id
@@ -46,12 +52,15 @@ async def test_check_availability(client):
         _mock_result(scalars_val=[]),
     ]
 
-    resp = await ac.post("/api/reservations/availability", json={
-        "restaurantId": 1,
-        "reservationStart": _future,
-        "reservationEnd": _future_end,
-        "partySize": 2,
-    })
+    resp = await ac.post(
+        "/api/reservations/availability",
+        json={
+            "restaurantId": 1,
+            "reservationStart": _future,
+            "reservationEnd": _future_end,
+            "partySize": 2,
+        },
+    )
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["available"] is True
@@ -79,12 +88,15 @@ async def test_duplicate_reservation_rejected(auth_client, mock_client_user):
         _mock_result(scalars_val=[conflicting]),
     ]
 
-    resp = await ac.post("/api/reservations/", json={
-        "restaurantId": 1,
-        "tableId": 1,
-        "reservationStart": _future,
-        "reservationEnd": _future_end,
-    })
+    resp = await ac.post(
+        "/api/reservations/",
+        json={
+            "restaurantId": 1,
+            "tableId": 1,
+            "reservationStart": _future,
+            "reservationEnd": _future_end,
+        },
+    )
     assert resp.status_code == 400, resp.text
     assert "available" in resp.json()["detail"].lower()
 
@@ -132,12 +144,15 @@ async def test_create_reservation(auth_client, mock_client_user):
         _mock_result(scalar_one_or_none_val=reservation),
     ]
 
-    resp = await ac.post("/api/reservations/", json={
-        "restaurantId": 1,
-        "tableId": 1,
-        "reservationStart": _future,
-        "reservationEnd": _future_end,
-    })
+    resp = await ac.post(
+        "/api/reservations/",
+        json={
+            "restaurantId": 1,
+            "tableId": 1,
+            "reservationStart": _future,
+            "reservationEnd": _future_end,
+        },
+    )
     assert resp.status_code == 200, resp.text
 
 
@@ -183,7 +198,17 @@ async def test_get_reservation(auth_client, mock_client_user):
             "phone": str(mock_client_user.phone),
         },
         table={"id": 1, "number": "T01", "capacity": 4},
-        restaurant={"id": 1, "name": "Test Restaurant", "description": "A test", "phone": "0123456789", "email": "test@rest.com", "website": "", "logo": "", "coverImage": "", "isActive": True},
+        restaurant={
+            "id": 1,
+            "name": "Test Restaurant",
+            "description": "A test",
+            "phone": "0123456789",
+            "email": "test@rest.com",
+            "website": "",
+            "logo": "",
+            "coverImage": "",
+            "isActive": True,
+        },
     )
 
     mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=reservation)
@@ -213,7 +238,17 @@ async def test_update_reservation_status(staff_client, mock_staff_user):
         restaurant_id=mock_staff_user.restaurantId,
         user={"id": 1, "firstName": "Test", "lastName": "User", "phone": "1234567890"},
         table={"id": 1, "number": "T01", "capacity": 4},
-        restaurant={"id": 1, "name": "Test Restaurant", "description": "A test", "phone": "0123456789", "email": "test@rest.com", "website": "", "logo": "", "coverImage": "", "isActive": True},
+        restaurant={
+            "id": 1,
+            "name": "Test Restaurant",
+            "description": "A test",
+            "phone": "0123456789",
+            "email": "test@rest.com",
+            "website": "",
+            "logo": "",
+            "coverImage": "",
+            "isActive": True,
+        },
     )
 
     mock_db.get.return_value = reservation
@@ -221,9 +256,12 @@ async def test_update_reservation_status(staff_client, mock_staff_user):
         scalar_one_or_none_val=reservation,
     )
 
-    resp = await ac.patch("/api/reservations/1/status", json={
-        "status": "CONFIRMED",
-    })
+    resp = await ac.patch(
+        "/api/reservations/1/status",
+        json={
+            "status": "CONFIRMED",
+        },
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "CONFIRMED"
 

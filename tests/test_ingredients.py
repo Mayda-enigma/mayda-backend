@@ -1,8 +1,9 @@
 """Tests for the ingredients route module."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from tests.conftest import _mock_result
 
@@ -53,6 +54,7 @@ async def test_create_ingredient(staff_client, mock_staff_user, staff_token):
     ac, mock_db = staff_client
 
     from app.models.sqlalchemy_models import Ingredient
+
     real_refresh = mock_db.refresh
 
     async def refresh_side_effect(obj):

@@ -1,7 +1,7 @@
 """Comprehensive tests for order endpoints."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,12 +18,31 @@ def _mock_table_columns(column_names):
 
 
 _ORDER_COLUMNS = [
-    "id", "orderNumber", "userId", "restaurantId", "tableId",
-    "type", "status", "subtotal", "deliveryFee", "discount",
-    "totalAmount", "deliveryAddressId", "estimatedDeliveryTime",
-    "actualDeliveryTime", "paymentStatus", "paymentMethod", "notes",
-    "orderTime", "confirmedAt", "preparedAt", "readyAt",
-    "completedAt", "createdAt", "updatedAt", "paymentId",
+    "id",
+    "orderNumber",
+    "userId",
+    "restaurantId",
+    "tableId",
+    "type",
+    "status",
+    "subtotal",
+    "deliveryFee",
+    "discount",
+    "totalAmount",
+    "deliveryAddressId",
+    "estimatedDeliveryTime",
+    "actualDeliveryTime",
+    "paymentStatus",
+    "paymentMethod",
+    "notes",
+    "orderTime",
+    "confirmedAt",
+    "preparedAt",
+    "readyAt",
+    "completedAt",
+    "createdAt",
+    "updatedAt",
+    "paymentId",
 ]
 
 
@@ -117,8 +136,15 @@ async def test_create_public_order_dine_in(client):
     order = _make_mock_order(
         restaurant=restaurant,
         items=[
-            MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                      totalPrice=25.0, id=1, notes=None),
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            ),
         ],
     )
 
@@ -130,13 +156,16 @@ async def test_create_public_order_dine_in(client):
         _mock_result(scalars_val=[]),
     ]
 
-    resp = await ac.post("/api/orders/public", json={
-        "restaurantId": 1,
-        "tableId": 1,
-        "type": "DINE_IN",
-        "items": [{"dishId": 1, "quantity": 1}],
-        "notes": "No onions",
-    })
+    resp = await ac.post(
+        "/api/orders/public",
+        json={
+            "restaurantId": 1,
+            "tableId": 1,
+            "type": "DINE_IN",
+            "items": [{"dishId": 1, "quantity": 1}],
+            "notes": "No onions",
+        },
+    )
     assert resp.status_code == 200, resp.text
 
 
@@ -145,12 +174,15 @@ async def test_create_public_order_delivery_rejected(client):
     """POST /api/orders/public with DELIVERY type -> 403."""
     ac, _ = client
 
-    resp = await ac.post("/api/orders/public", json={
-        "restaurantId": 1,
-        "tableId": 1,
-        "type": "DELIVERY",
-        "items": [{"dishId": 1, "quantity": 1}],
-    })
+    resp = await ac.post(
+        "/api/orders/public",
+        json={
+            "restaurantId": 1,
+            "tableId": 1,
+            "type": "DELIVERY",
+            "items": [{"dishId": 1, "quantity": 1}],
+        },
+    )
     assert resp.status_code == 403
     assert "dine-in" in resp.json()["detail"].lower()
 
@@ -160,11 +192,14 @@ async def test_create_public_order_no_table_rejected(client):
     """POST /api/orders/public DINE_IN without tableId -> 400."""
     ac, _ = client
 
-    resp = await ac.post("/api/orders/public", json={
-        "restaurantId": 1,
-        "type": "DINE_IN",
-        "items": [{"dishId": 1, "quantity": 1}],
-    })
+    resp = await ac.post(
+        "/api/orders/public",
+        json={
+            "restaurantId": 1,
+            "type": "DINE_IN",
+            "items": [{"dishId": 1, "quantity": 1}],
+        },
+    )
     assert resp.status_code == 400
     assert "table" in resp.json()["detail"].lower()
 
@@ -179,8 +214,15 @@ async def test_create_order_dine_in(auth_client, mock_client_user):
     order = _make_mock_order(
         restaurant=restaurant,
         items=[
-            MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                      totalPrice=25.0, id=1, notes=None),
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            ),
         ],
     )
 
@@ -192,11 +234,14 @@ async def test_create_order_dine_in(auth_client, mock_client_user):
         _mock_result(scalars_val=[]),
     ]
 
-    resp = await ac.post("/api/orders/", json={
-        "restaurantId": 1,
-        "type": "DINE_IN",
-        "items": [{"dishId": 1, "quantity": 1}],
-    })
+    resp = await ac.post(
+        "/api/orders/",
+        json={
+            "restaurantId": 1,
+            "type": "DINE_IN",
+            "items": [{"dishId": 1, "quantity": 1}],
+        },
+    )
     assert resp.status_code == 200, resp.text
 
 
@@ -205,11 +250,14 @@ async def test_create_order_missing_items(auth_client, mock_client_user):
     """POST /api/orders/ with empty items list -> 422."""
     ac, _ = auth_client
 
-    resp = await ac.post("/api/orders/", json={
-        "restaurantId": 1,
-        "type": "DINE_IN",
-        "items": [],
-    })
+    resp = await ac.post(
+        "/api/orders/",
+        json={
+            "restaurantId": 1,
+            "type": "DINE_IN",
+            "items": [],
+        },
+    )
     assert resp.status_code == 422
 
 
@@ -238,8 +286,17 @@ async def test_get_order_by_id(auth_client, mock_client_user):
     order = _make_mock_order(
         userId=mock_client_user.id,
         restaurant=_make_mock_restaurant(),
-        items=[MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                         totalPrice=25.0, id=1, notes=None)],
+        items=[
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            )
+        ],
         user=mock_client_user,
     )
 
@@ -271,17 +328,29 @@ async def test_update_order_status(staff_client, mock_staff_user):
     order = _make_mock_order(
         restaurantId=mock_staff_user.restaurantId,
         restaurant=restaurant,
-        items=[MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                         totalPrice=25.0, id=1, notes=None)],
+        items=[
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            )
+        ],
         user=mock_staff_user,
     )
 
     mock_db.get.return_value = order
     mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=order)
 
-    resp = await ac.patch("/api/orders/1/status", json={
-        "status": "CONFIRMED",
-    })
+    resp = await ac.patch(
+        "/api/orders/1/status",
+        json={
+            "status": "CONFIRMED",
+        },
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "CONFIRMED"
 
@@ -297,22 +366,44 @@ async def test_cancel_order(staff_client, mock_staff_user):
         restaurantId=mock_staff_user.restaurantId,
         restaurant=restaurant,
         status="PENDING",
-        items=[MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                         totalPrice=25.0, id=1, notes=None)],
+        items=[
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            )
+        ],
     )
 
     mock_db.get.return_value = order
     cancelled = _make_mock_order(
-        order_id=1, restaurantId=mock_staff_user.restaurantId,
+        order_id=1,
+        restaurantId=mock_staff_user.restaurantId,
         restaurant=restaurant,
         status="CANCELLED",
-        items=[MagicMock(dish=dish, dishId=1, quantity=1, unitPrice=25.0,
-                         totalPrice=25.0, id=1, notes=None)],
+        items=[
+            MagicMock(
+                dish=dish,
+                dishId=1,
+                quantity=1,
+                unitPrice=25.0,
+                totalPrice=25.0,
+                id=1,
+                notes=None,
+            )
+        ],
     )
     mock_db.execute.return_value = _mock_result(scalar_one_or_none_val=cancelled)
 
-    resp = await ac.patch("/api/orders/1/status", json={
-        "status": "CANCELLED",
-    })
+    resp = await ac.patch(
+        "/api/orders/1/status",
+        json={
+            "status": "CANCELLED",
+        },
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "CANCELLED"

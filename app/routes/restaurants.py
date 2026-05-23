@@ -1,15 +1,26 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
 import secrets
 import string
-from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
+
 from app.auth.jwt import get_password_hash
-from app.models.restaurant import (
-    RestaurantCreate, RestaurantUpdate, RestaurantResponse, 
-    RestaurantListResponse
+from app.core.database import get_db_session
+from app.middleware.roles import (
+    get_current_admin_user,
+    get_current_manager_or_admin,
+    get_current_user_optional,
+    require_restaurant_staff,
 )
+from app.models.restaurant import (
+    RestaurantCreate,
+    RestaurantListResponse,
+    RestaurantResponse,
+    RestaurantUpdate,
+)
+from app.models.sqlalchemy_models import Address, Restaurant, User
 from app.models.staff import (
     StaffInviteRequest,
     StaffInviteResponse,
@@ -17,15 +28,8 @@ from app.models.staff import (
     StaffResponse,
     StaffUpdate,
 )
-from app.core.database import get_db_session
-from app.middleware.roles import (
-    get_current_admin_user, get_current_manager_or_admin,
-    get_current_user_optional, require_restaurant_staff
-)
 from app.models.user import UserRole
-from app.models.sqlalchemy_models import Restaurant, User, Address
 from app.utils.sms_service import SMSService, sms_service
-
 
 router = APIRouter(prefix="/restaurants", tags=["Restaurants"])
 
@@ -42,12 +46,12 @@ def generate_temporary_password(length: int = 10) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-@router.get("/", response_model=List[RestaurantListResponse])
+@router.get("/", response_model=list[RestaurantListResponse])
 async def get_restaurants(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = Query(True),
-    current_user = Depends(get_current_user_optional),
+    current_user=Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get list of restaurants (public endpoint)."""
@@ -66,23 +70,18 @@ async def get_restaurants(
 @router.get("/{restaurant_id}", response_model=RestaurantResponse)
 async def get_restaurant(
     restaurant_id: int,
-    current_user = Depends(get_current_user_optional),
+    current_user=Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant by ID (public endpoint)."""
 
     result = await db.execute(
-        select(Restaurant)
-        .where(Restaurant.id == restaurant_id)
-        .options(selectinload(Restaurant.address))
+        select(Restaurant).where(Restaurant.id == restaurant_id).options(selectinload(Restaurant.address))
     )
     restaurant = result.scalar_one_or_none()
 
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     return RestaurantResponse.model_validate(restaurant)
 
@@ -90,7 +89,7 @@ async def get_restaurant(
 @router.post("/", response_model=RestaurantResponse)
 async def create_restaurant(
     restaurant_data: RestaurantCreate,
-    current_user = Depends(get_current_admin_user),
+    current_user=Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new restaurant (Admin only)."""
@@ -106,7 +105,7 @@ async def create_restaurant(
             logo=restaurant_data.logo,
             coverImage=restaurant_data.coverImage,
             gallery=restaurant_data.gallery or [],
-            isActive=restaurant_data.isActive
+            isActive=restaurant_data.isActive,
         )
         db.add(restaurant)
         await db.flush()
@@ -117,15 +116,13 @@ async def create_restaurant(
             city=restaurant_data.city,
             latitude=restaurant_data.latitude,
             longitude=restaurant_data.longitude,
-            isDefault=True
+            isDefault=True,
         )
         db.add(address)
         await db.commit()
 
         result = await db.execute(
-            select(Restaurant)
-            .where(Restaurant.id == restaurant.id)
-            .options(selectinload(Restaurant.address))
+            select(Restaurant).where(Restaurant.id == restaurant.id).options(selectinload(Restaurant.address))
         )
         restaurant_with_address = result.scalar_one()
 
@@ -134,7 +131,7 @@ async def create_restaurant(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creating restaurant: {str(e)}"
+            detail=f"Error creating restaurant: {str(e)}",
         )
 
 
@@ -142,22 +139,19 @@ async def create_restaurant(
 async def update_restaurant(
     restaurant_id: int,
     restaurant_data: RestaurantUpdate,
-    current_user = Depends(get_current_manager_or_admin),
+    current_user=Depends(get_current_manager_or_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update restaurant (Manager/Admin only). Managers can only update their own restaurant."""
 
     restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     if current_user.role.value != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update your own restaurant"
+            detail="You can only update your own restaurant",
         )
 
     update_data = {}
@@ -166,10 +160,7 @@ async def update_restaurant(
             update_data[field] = value
 
     if not update_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid fields to update"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid fields to update")
 
     try:
         for field, value in update_data.items():
@@ -177,9 +168,7 @@ async def update_restaurant(
         await db.commit()
 
         result = await db.execute(
-            select(Restaurant)
-            .where(Restaurant.id == restaurant_id)
-            .options(selectinload(Restaurant.address))
+            select(Restaurant).where(Restaurant.id == restaurant_id).options(selectinload(Restaurant.address))
         )
         updated_restaurant = result.scalar_one()
 
@@ -188,24 +177,21 @@ async def update_restaurant(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating restaurant: {str(e)}"
+            detail=f"Error updating restaurant: {str(e)}",
         )
 
 
 @router.delete("/{restaurant_id}")
 async def delete_restaurant(
     restaurant_id: int,
-    current_user = Depends(get_current_admin_user),
+    current_user=Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Delete restaurant (Admin only)."""
 
     restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     try:
         await db.delete(restaurant)
@@ -215,29 +201,26 @@ async def delete_restaurant(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error deleting restaurant: {str(e)}"
+            detail=f"Error deleting restaurant: {str(e)}",
         )
 
 
 @router.patch("/{restaurant_id}/toggle-status")
 async def toggle_restaurant_status(
     restaurant_id: int,
-    current_user = Depends(get_current_manager_or_admin),
+    current_user=Depends(get_current_manager_or_admin),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Toggle restaurant active status (Manager/Admin only)."""
 
     restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     if current_user.role.value != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only manage your own restaurant"
+            detail="You can only manage your own restaurant",
         )
 
     try:
@@ -245,44 +228,39 @@ async def toggle_restaurant_status(
         await db.commit()
 
         result = await db.execute(
-            select(Restaurant)
-            .where(Restaurant.id == restaurant_id)
-            .options(selectinload(Restaurant.address))
+            select(Restaurant).where(Restaurant.id == restaurant_id).options(selectinload(Restaurant.address))
         )
         updated_restaurant = result.scalar_one()
 
         return {
             "message": f"Restaurant {'activated' if updated_restaurant.isActive else 'deactivated'} successfully",
-            "restaurant": RestaurantResponse.model_validate(updated_restaurant)
+            "restaurant": RestaurantResponse.model_validate(updated_restaurant),
         }
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating restaurant status: {str(e)}"
+            detail=f"Error updating restaurant status: {str(e)}",
         )
 
 
 @router.get("/{restaurant_id}/staff", response_model=StaffListResponse)
 async def get_restaurant_staff(
     restaurant_id: int,
-    current_user = Depends(require_restaurant_staff),
+    current_user=Depends(require_restaurant_staff),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant staff (Manager/Admin only). Managers can only see their own restaurant staff."""
 
     restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     result = await db.execute(
         select(User)
         .where(
             User.restaurantId == restaurant_id,
-            User.role.in_(["WAITER", "CHEF", "MANAGER"])
+            User.role.in_(["WAITER", "CHEF", "MANAGER"]),
         )
         .order_by(User.role)
     )
@@ -296,11 +274,15 @@ async def get_restaurant_staff(
     )
 
 
-@router.post("/{restaurant_id}/staff/invite", response_model=StaffInviteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{restaurant_id}/staff/invite",
+    response_model=StaffInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def invite_restaurant_staff(
     restaurant_id: int,
     staff_data: StaffInviteRequest,
-    current_user = Depends(require_restaurant_staff),
+    current_user=Depends(require_restaurant_staff),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Create a staff user for a restaurant and send an invite SMS."""
@@ -308,27 +290,22 @@ async def invite_restaurant_staff(
     if not is_staff_role(staff_data.role):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role must be WAITER, CHEF, or MANAGER"
+            detail="Role must be WAITER, CHEF, or MANAGER",
         )
 
     restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Restaurant not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Restaurant not found")
 
     filters = [User.phone == staff_data.phone]
     if staff_data.email:
         filters.append(User.email == staff_data.email)
 
-    existing_user = (
-        await db.execute(select(User).where(or_(*filters)))
-    ).scalar_one_or_none()
+    existing_user = (await db.execute(select(User).where(or_(*filters)))).scalar_one_or_none()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email or phone already exists"
+            detail="User with this email or phone already exists",
         )
 
     temporary_password = generate_temporary_password()
@@ -358,7 +335,7 @@ async def invite_restaurant_staff(
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send invite SMS"
+            detail="Failed to send invite SMS",
         )
 
     return StaffInviteResponse(
@@ -373,7 +350,7 @@ async def update_restaurant_staff(
     restaurant_id: int,
     user_id: int,
     staff_update: StaffUpdate,
-    current_user = Depends(require_restaurant_staff),
+    current_user=Depends(require_restaurant_staff),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Update a staff user's role or active status."""
@@ -381,21 +358,15 @@ async def update_restaurant_staff(
     if staff_update.role is not None and not is_staff_role(staff_update.role):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role must be WAITER, CHEF, or MANAGER"
+            detail="Role must be WAITER, CHEF, or MANAGER",
         )
 
     staff_user = await db.get(User, user_id)
     if not staff_user or staff_user.restaurantId != restaurant_id or staff_user.role.value not in STAFF_ROLE_VALUES:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Staff user not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff user not found")
 
     if staff_update.role is None and staff_update.isActive is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid fields to update"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid fields to update")
 
     if staff_update.role is not None:
         staff_user.role = staff_update.role.value
@@ -412,17 +383,14 @@ async def update_restaurant_staff(
 async def deactivate_restaurant_staff(
     restaurant_id: int,
     user_id: int,
-    current_user = Depends(require_restaurant_staff),
+    current_user=Depends(require_restaurant_staff),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Soft-delete staff by deactivating the account."""
 
     staff_user = await db.get(User, user_id)
     if not staff_user or staff_user.restaurantId != restaurant_id or staff_user.role.value not in STAFF_ROLE_VALUES:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Staff user not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff user not found")
 
     staff_user.isActive = False
     await db.commit()

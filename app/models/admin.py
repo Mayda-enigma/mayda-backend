@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -15,9 +15,9 @@ class RecentActivityItem(BaseModel):
     type: str
     id: int
     timestamp: datetime
-    restaurantId: Optional[int] = None
-    restaurantName: Optional[str] = None
-    details: Dict[str, Any] = Field(default_factory=dict)
+    restaurantId: int | None = None
+    restaurantName: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class AdminStatsResponse(BaseModel):
@@ -25,7 +25,7 @@ class AdminStatsResponse(BaseModel):
     totalOrdersToday: int
     revenueToday: float
     activeUsers: int
-    recentActivity: List[RecentActivityItem]
+    recentActivity: list[RecentActivityItem]
 
 
 class RestaurantAnalyticsItem(BaseModel):
@@ -47,16 +47,16 @@ class AdminAnalyticsResponse(BaseModel):
     uniqueCustomers: int
     totalReservations: int
     totalReviews: int
-    ordersByStatus: Dict[str, int]
-    restaurantBreakdown: List[RestaurantAnalyticsItem]
+    ordersByStatus: dict[str, int]
+    restaurantBreakdown: list[RestaurantAnalyticsItem]
 
 
 class PlatformSettingsResponse(BaseModel):
     id: int
     currency: str
     timezone: str
-    defaultOperatingHours: Dict[str, Any]
-    featureFlags: Dict[str, Any]
+    defaultOperatingHours: dict[str, Any]
+    featureFlags: dict[str, Any]
     updatedAt: datetime
 
     class Config:
@@ -64,7 +64,7 @@ class PlatformSettingsResponse(BaseModel):
 
 
 class PlatformSettingsUpdate(BaseModel):
-    currency: Optional[str] = None
-    timezone: Optional[str] = None
-    defaultOperatingHours: Optional[Dict[str, Any]] = None
-    featureFlags: Optional[Dict[str, Any]] = None
+    currency: str | None = None
+    timezone: str | None = None
+    defaultOperatingHours: dict[str, Any] | None = None
+    featureFlags: dict[str, Any] | None = None

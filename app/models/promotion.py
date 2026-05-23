@@ -1,7 +1,7 @@
-from pydantic import BaseModel, validator, Field
-from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+
+from pydantic import BaseModel, Field, validator
 
 
 class PromotionType(str, Enum):
@@ -21,69 +21,69 @@ class PromotionCreate(BaseModel):
     restaurantId: int
     title: str = Field(..., min_length=1, max_length=100)
     description: str = Field(..., min_length=1, max_length=500)
-    image: Optional[str] = None
+    image: str | None = None
     type: PromotionType
     discountType: DiscountType
     discountValue: float = Field(..., gt=0)
-    minOrderAmount: Optional[float] = Field(None, ge=0)
+    minOrderAmount: float | None = Field(None, ge=0)
     startDate: datetime
     endDate: datetime
-    maxUses: Optional[int] = Field(None, gt=0)
-    dishIds: Optional[List[int]] = []  # Specific dishes this promotion applies to
-    
-    @validator('endDate')
+    maxUses: int | None = Field(None, gt=0)
+    dishIds: list[int] | None = []  # Specific dishes this promotion applies to
+
+    @validator("endDate")
     def validate_end_date(cls, v, values):
-        if 'startDate' in values and v <= values['startDate']:
-            raise ValueError('End date must be after start date')
+        if "startDate" in values and v <= values["startDate"]:
+            raise ValueError("End date must be after start date")
         return v
-    
-    @validator('startDate')
+
+    @validator("startDate")
     def validate_start_date(cls, v):
         if v < datetime.now():
-            raise ValueError('Start date cannot be in the past')
+            raise ValueError("Start date cannot be in the past")
         return v
-    
-    @validator('discountValue')
+
+    @validator("discountValue")
     def validate_discount_value(cls, v, values):
-        if 'discountType' in values:
-            if values['discountType'] == DiscountType.PERCENTAGE:
+        if "discountType" in values:  # noqa: SIM102
+            if values["discountType"] == DiscountType.PERCENTAGE:  # noqa: SIM102
                 if v > 100:
-                    raise ValueError('Percentage discount cannot exceed 100%')
+                    raise ValueError("Percentage discount cannot exceed 100%")
         return v
 
 
 class PromotionUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, min_length=1, max_length=500)
-    image: Optional[str] = None
-    discountValue: Optional[float] = Field(None, gt=0)
-    minOrderAmount: Optional[float] = Field(None, ge=0)
-    endDate: Optional[datetime] = None
-    maxUses: Optional[int] = Field(None, gt=0)
-    isActive: Optional[bool] = None
-    dishIds: Optional[List[int]] = None
+    title: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, min_length=1, max_length=500)
+    image: str | None = None
+    discountValue: float | None = Field(None, gt=0)
+    minOrderAmount: float | None = Field(None, ge=0)
+    endDate: datetime | None = None
+    maxUses: int | None = Field(None, gt=0)
+    isActive: bool | None = None
+    dishIds: list[int] | None = None
 
 
 class PromotionResponse(BaseModel):
     id: int
     restaurantId: int
-    restaurant: Optional[dict] = None
+    restaurant: dict | None = None
     title: str
     description: str
-    image: Optional[str]
+    image: str | None
     type: PromotionType
     discountType: DiscountType
     discountValue: float
-    minOrderAmount: Optional[float]
+    minOrderAmount: float | None
     startDate: datetime
     endDate: datetime
-    maxUses: Optional[int]
+    maxUses: int | None
     currentUses: int
     isActive: bool
     createdAt: datetime
     updatedAt: datetime
-    dishes: Optional[List[dict]] = []  # Applicable dishes
-    
+    dishes: list[dict] | None = []  # Applicable dishes
+
     class Config:
         from_attributes = True
 
@@ -91,22 +91,22 @@ class PromotionResponse(BaseModel):
 class PromotionListResponse(BaseModel):
     id: int
     restaurantId: int
-    restaurantName: Optional[str] = None
+    restaurantName: str | None = None
     title: str
     description: str
-    image: Optional[str]
+    image: str | None
     type: PromotionType
     discountType: DiscountType
     discountValue: float
-    minOrderAmount: Optional[float]
+    minOrderAmount: float | None
     startDate: datetime
     endDate: datetime
-    maxUses: Optional[int]
+    maxUses: int | None
     currentUses: int
     isActive: bool
     isExpired: bool = False
     dishCount: int = 0  # Number of applicable dishes
-    
+
     class Config:
         from_attributes = True
 
@@ -120,10 +120,10 @@ class PromotionUsageResponse(BaseModel):
     applicable: bool
     discountAmount: float
     finalAmount: float
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class ActivePromotionsResponse(BaseModel):
     totalPromotions: int
-    restaurantPromotions: List[PromotionListResponse]
-    dishSpecificPromotions: List[PromotionListResponse]
+    restaurantPromotions: list[PromotionListResponse]
+    dishSpecificPromotions: list[PromotionListResponse]

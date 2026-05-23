@@ -1,18 +1,19 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RestaurantBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     phone: str = Field(..., min_length=10, max_length=20)
-    email: Optional[EmailStr] = None
-    website: Optional[str] = None
-    operatingHours: Dict[str, Any] = Field(..., description="Operating hours in JSON format")
-    logo: Optional[str] = None
-    coverImage: Optional[str] = None
-    gallery: Optional[List[str]] = []
+    email: EmailStr | None = None
+    website: str | None = None
+    operatingHours: dict[str, Any] = Field(..., description="Operating hours in JSON format")
+    logo: str | None = None
+    coverImage: str | None = None
+    gallery: list[str] | None = []
     isActive: bool = True
 
 
@@ -20,33 +21,33 @@ class RestaurantCreate(RestaurantBase):
     # Address fields for creating restaurant with address
     street: str = Field(..., min_length=1)
     city: str = Field(..., min_length=1)
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class RestaurantUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=20)
-    email: Optional[EmailStr] = None
-    website: Optional[str] = None
-    operatingHours: Optional[Dict[str, Any]] = None
-    logo: Optional[str] = None
-    coverImage: Optional[str] = None
-    gallery: Optional[List[str]] = None
-    isActive: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    phone: str | None = Field(None, min_length=10, max_length=20)
+    email: EmailStr | None = None
+    website: str | None = None
+    operatingHours: dict[str, Any] | None = None
+    logo: str | None = None
+    coverImage: str | None = None
+    gallery: list[str] | None = None
+    isActive: bool | None = None
 
 
 class AddressResponse(BaseModel):
     id: int
     street: str
     city: str
-    latitude: Optional[float]
-    longitude: Optional[float]
+    latitude: float | None
+    longitude: float | None
     isDefault: bool
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -54,19 +55,19 @@ class AddressResponse(BaseModel):
 class RestaurantResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str]
+    description: str | None
     phone: str
-    email: Optional[str]
-    website: Optional[str]
-    operatingHours: Dict[str, Any]
-    logo: Optional[str]
-    coverImage: Optional[str]
-    gallery: List[str]
+    email: str | None
+    website: str | None
+    operatingHours: dict[str, Any]
+    logo: str | None
+    coverImage: str | None
+    gallery: list[str]
     isActive: bool
     createdAt: datetime
     updatedAt: datetime
-    address: Optional[AddressResponse]
-    
+    address: AddressResponse | None
+
     class Config:
         from_attributes = True
 
@@ -74,12 +75,12 @@ class RestaurantResponse(BaseModel):
 class RestaurantListResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str]
+    description: str | None
     phone: str
-    logo: Optional[str]
-    coverImage: Optional[str]
+    logo: str | None
+    coverImage: str | None
     isActive: bool
-    address: Optional[AddressResponse]
-    
+    address: AddressResponse | None
+
     class Config:
         from_attributes = True

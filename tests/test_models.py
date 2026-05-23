@@ -26,10 +26,11 @@ from app.models.auth import (
 )
 from app.models.sqlalchemy_models import (
     RefreshToken as SARefreshToken,
+)
+from app.models.sqlalchemy_models import (
     User as SAUser,
 )
 from app.models.user import UserRole
-
 
 # ── Pydantic model validation ────────────────────────────────────────────────
 
@@ -63,9 +64,7 @@ class TestPydanticModels:
 
     def test_user_register_invalid_password_short(self):
         with pytest.raises(ValidationError):
-            UserRegister(
-                phone=1, firstName="X", lastName="Y", password="ab"
-            )
+            UserRegister(phone=1, firstName="X", lastName="Y", password="ab")
 
     def test_user_register_staff_needs_restaurant_id(self):
         """Staff roles must specify a restaurantId at the route level,
@@ -137,9 +136,7 @@ class TestPydanticModels:
         assert data.email is None
 
     def test_password_change(self):
-        data = PasswordChange(
-            current_password="old", new_password="newpassword123"
-        )
+        data = PasswordChange(current_password="old", new_password="newpassword123")
         assert data.current_password == "old"
         assert data.new_password == "newpassword123"
 
@@ -199,24 +196,18 @@ class TestJWT:
     def test_expired_token_returns_none(self):
         from datetime import timedelta
 
-        token = create_access_token(
-            data={"sub": "1"}, expires_delta=timedelta(hours=-1)
-        )
+        token = create_access_token(data={"sub": "1"}, expires_delta=timedelta(hours=-1))
         assert verify_token(token) is None
 
     def test_manual_decode(self):
         token = create_access_token(data={"sub": "5"})
-        decoded = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
+        decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         assert decoded["sub"] == "5"
         assert decoded["type"] == "access"
 
     def test_access_token_expires_in_future(self):
         token = create_access_token(data={"sub": "1"})
-        decoded = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
+        decoded = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         exp = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
         assert exp > datetime.now(timezone.utc)
 
