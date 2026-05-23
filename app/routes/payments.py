@@ -67,9 +67,9 @@ async def initiate_payment_with_otp(
             )
         
         # Send OTP for payment confirmation
-        otp_code = await sms_service.send_otp(current_user.id, str(current_user.phone), "PAYMENT_CONFIRMATION")
+        otp_result = await sms_service.send_otp(current_user.id, str(current_user.phone), "PAYMENT_CONFIRMATION")
         
-        if not otp_code:
+        if not otp_result.get("success", False):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send OTP for payment verification"
