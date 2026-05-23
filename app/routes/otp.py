@@ -9,13 +9,17 @@ from app.core.database import get_db_session
 from app.utils.sms_service import sms_service
 from app.auth.jwt import create_access_token, create_refresh_token
 from app.middleware.roles import get_current_user
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_, or_, update as sa_update
+from sqlalchemy.orm import selectinload
+from app.models.sqlalchemy_models import User, Order
 
 
 router = APIRouter(prefix="/otp", tags=["OTP Authentication"])
 
 
 @router.post("/staff/send", response_model=OtpSendResponse)
-async def send_staff_otp(request: StaffLoginRequest, db: "Prisma" = Depends(get_db_session)):
+async def send_staff_otp(request: StaffLoginRequest, db: AsyncSession = Depends(get_db_session)):
     """
     Send OTP to staff member for authentication.
     Only staff members (WAITER, CHEF, MANAGER, ADMIN) can receive OTP.
@@ -29,9 +33,8 @@ async def send_staff_otp(request: StaffLoginRequest, db: "Prisma" = Depends(get_
     
     try:
         # Find staff user by phone
-        user = await db.user.find_unique(
-            where={"phone": request.phone}
-        )
+        result = await db.execute(select(User).where(User.phone == request.phone))
+        user = result.scalar_one_or_none()
         
         if not user:
             raise HTTPException(
@@ -76,7 +79,7 @@ async def send_staff_otp(request: StaffLoginRequest, db: "Prisma" = Depends(get_
 
 
 @router.post("/staff/verify", response_model=OtpVerifyResponse)
-async def verify_staff_otp(request: StaffOtpVerifyRequest, db: "Prisma" = Depends(get_db_session)):
+async def verify_staff_otp(request: StaffOtpVerifyRequest, db: AsyncSession = Depends(get_db_session)):
     """
     Verify OTP code for staff authentication and return access token.
     """
@@ -89,10 +92,9 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest, db: "Prisma" = Depend
     
     try:
         # Find staff user by phone
-        user = await db.user.find_unique(
-            where={"phone": request.phone},
-            include={"restaurant": True}
-        )
+        stmt = select(User).options(selectinload(User.restaurant)).where(User.phone == request.phone)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
         
         if not user:
             raise HTTPException(
@@ -154,7 +156,7 @@ async def verify_staff_otp(request: StaffOtpVerifyRequest, db: "Prisma" = Depend
 async def send_payment_otp(
     request: PaymentOtpRequest,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Send OTP for payment confirmation.
@@ -169,10 +171,9 @@ async def send_payment_otp(
     
     try:
         # Get order and validate ownership
-        order = await db.order.find_unique(
-            where={"id": request.orderId},
-            include={"user": True}
-        )
+        stmt = select(Order).options(selectinload(Order.user)).where(Order.id == request.orderId)
+        result = await db.execute(stmt)
+        order = result.scalar_one_or_none()
         
         if not order:
             raise HTTPException(
@@ -222,7 +223,7 @@ async def send_payment_otp(
 async def verify_payment_otp(
     request: PaymentOtpVerifyRequest,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Verify OTP for payment confirmation and mark order as paid.
@@ -236,10 +237,9 @@ async def verify_payment_otp(
     
     try:
         # Get order and validate
-        order = await db.order.find_unique(
-            where={"id": request.orderId},
-            include={"user": True}
-        )
+        stmt = select(Order).options(selectinload(Order.user)).where(Order.id == request.orderId)
+        result = await db.execute(stmt)
+        order = result.scalar_one_or_none()
         
         if not order:
             raise HTTPException(
@@ -265,10 +265,8 @@ async def verify_payment_otp(
             )
         
         # Update order payment status
-        await db.order.update(
-            where={"id": request.orderId},
-            data={"paymentStatus": "PAID"}
-        )
+        order.paymentStatus = "PAID"
+        await db.commit()
         
         return {
             "success": True,

@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 import secrets
 import string
 from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
+from sqlalchemy.orm import selectinload
 from app.auth.jwt import get_password_hash
 from app.models.restaurant import (
     RestaurantCreate, RestaurantUpdate, RestaurantResponse, 
@@ -20,12 +23,14 @@ from app.middleware.roles import (
     get_current_user_optional, require_restaurant_staff
 )
 from app.models.user import UserRole
+from app.models.sqlalchemy_models import Restaurant, User, Address
 from app.utils.sms_service import SMSService, sms_service
 
 
 router = APIRouter(prefix="/restaurants", tags=["Restaurants"])
 
 STAFF_ROLES = {UserRole.WAITER, UserRole.CHEF, UserRole.MANAGER}
+STAFF_ROLE_VALUES = {"WAITER", "CHEF", "MANAGER"}
 
 
 def is_staff_role(role: UserRole) -> bool:
@@ -43,44 +48,42 @@ async def get_restaurants(
     limit: int = Query(50, ge=1, le=100),
     active_only: bool = Query(True),
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get list of restaurants (public endpoint)."""
-    
-    where_clause = {}
+
+    query = select(Restaurant).options(selectinload(Restaurant.address))
     if active_only:
-        where_clause["isActive"] = True
-    
-    restaurants = await db.restaurant.find_many(
-        where=where_clause,
-        include={"address": True},
-        skip=skip,
-        take=limit,
-        order={"createdAt": "desc"}
-    )
-    
-    return [RestaurantListResponse.model_validate(restaurant) for restaurant in restaurants]
+        query = query.where(Restaurant.isActive == True)
+    query = query.order_by(Restaurant.createdAt.desc()).offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    restaurants = result.scalars().all()
+
+    return [RestaurantListResponse.model_validate(r) for r in restaurants]
 
 
 @router.get("/{restaurant_id}", response_model=RestaurantResponse)
 async def get_restaurant(
     restaurant_id: int,
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant by ID (public endpoint)."""
-    
-    restaurant = await db.restaurant.find_unique(
-        where={"id": restaurant_id},
-        include={"address": True}
+
+    result = await db.execute(
+        select(Restaurant)
+        .where(Restaurant.id == restaurant_id)
+        .options(selectinload(Restaurant.address))
     )
-    
+    restaurant = result.scalar_one_or_none()
+
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
+
     return RestaurantResponse.model_validate(restaurant)
 
 
@@ -88,52 +91,46 @@ async def get_restaurant(
 async def create_restaurant(
     restaurant_data: RestaurantCreate,
     current_user = Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new restaurant (Admin only)."""
-    
+
     try:
-        # Create restaurant with address in a transaction
-        result = await db.transaction([
-            # Create restaurant
-            db.restaurant.create(
-                data={
-                    "name": restaurant_data.name,
-                    "description": restaurant_data.description,
-                    "phone": restaurant_data.phone,
-                    "email": restaurant_data.email,
-                    "website": restaurant_data.website,
-                    "operatingHours": restaurant_data.operatingHours,
-                    "logo": restaurant_data.logo,
-                    "coverImage": restaurant_data.coverImage,
-                    "gallery": restaurant_data.gallery or [],
-                    "isActive": restaurant_data.isActive
-                }
-            )
-        ])
-        
-        restaurant = result[0]
-        
-        # Create address for the restaurant
-        await db.address.create(
-            data={
-                "restaurantId": restaurant.id,
-                "street": restaurant_data.street,
-                "city": restaurant_data.city,
-                "latitude": restaurant_data.latitude,
-                "longitude": restaurant_data.longitude,
-                "isDefault": True
-            }
+        restaurant = Restaurant(
+            name=restaurant_data.name,
+            description=restaurant_data.description,
+            phone=restaurant_data.phone,
+            email=restaurant_data.email,
+            website=restaurant_data.website,
+            operatingHours=restaurant_data.operatingHours,
+            logo=restaurant_data.logo,
+            coverImage=restaurant_data.coverImage,
+            gallery=restaurant_data.gallery or [],
+            isActive=restaurant_data.isActive
         )
-        
-        # Fetch restaurant with address
-        restaurant_with_address = await db.restaurant.find_unique(
-            where={"id": restaurant.id},
-            include={"address": True}
+        db.add(restaurant)
+        await db.flush()
+
+        address = Address(
+            restaurantId=restaurant.id,
+            street=restaurant_data.street,
+            city=restaurant_data.city,
+            latitude=restaurant_data.latitude,
+            longitude=restaurant_data.longitude,
+            isDefault=True
         )
-        
+        db.add(address)
+        await db.commit()
+
+        result = await db.execute(
+            select(Restaurant)
+            .where(Restaurant.id == restaurant.id)
+            .options(selectinload(Restaurant.address))
+        )
+        restaurant_with_address = result.scalar_one()
+
         return RestaurantResponse.model_validate(restaurant_with_address)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -146,46 +143,48 @@ async def update_restaurant(
     restaurant_id: int,
     restaurant_data: RestaurantUpdate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update restaurant (Manager/Admin only). Managers can only update their own restaurant."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    # Check permissions - managers can only update their own restaurant
-    if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
+
+    if current_user.role.value != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own restaurant"
         )
-    
-    # Prepare update data
+
     update_data = {}
     for field, value in restaurant_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
-    
+
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
-    
+
     try:
-        updated_restaurant = await db.restaurant.update(
-            where={"id": restaurant_id},
-            data=update_data,
-            include={"address": True}
+        for field, value in update_data.items():
+            setattr(restaurant, field, value)
+        await db.commit()
+
+        result = await db.execute(
+            select(Restaurant)
+            .where(Restaurant.id == restaurant_id)
+            .options(selectinload(Restaurant.address))
         )
-        
+        updated_restaurant = result.scalar_one()
+
         return RestaurantResponse.model_validate(updated_restaurant)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -197,22 +196,22 @@ async def update_restaurant(
 async def delete_restaurant(
     restaurant_id: int,
     current_user = Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete restaurant (Admin only)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
+
     try:
-        await db.restaurant.delete(where={"id": restaurant_id})
+        await db.delete(restaurant)
+        await db.commit()
         return {"message": "Restaurant deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -224,37 +223,39 @@ async def delete_restaurant(
 async def toggle_restaurant_status(
     restaurant_id: int,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Toggle restaurant active status (Manager/Admin only)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    # Check permissions
-    if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
+
+    if current_user.role.value != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only manage your own restaurant"
         )
-    
+
     try:
-        updated_restaurant = await db.restaurant.update(
-            where={"id": restaurant_id},
-            data={"isActive": not restaurant.isActive},
-            include={"address": True}
+        restaurant.isActive = not restaurant.isActive
+        await db.commit()
+
+        result = await db.execute(
+            select(Restaurant)
+            .where(Restaurant.id == restaurant_id)
+            .options(selectinload(Restaurant.address))
         )
-        
+        updated_restaurant = result.scalar_one()
+
         return {
             "message": f"Restaurant {'activated' if updated_restaurant.isActive else 'deactivated'} successfully",
             "restaurant": RestaurantResponse.model_validate(updated_restaurant)
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -266,30 +267,31 @@ async def toggle_restaurant_status(
 async def get_restaurant_staff(
     restaurant_id: int,
     current_user = Depends(require_restaurant_staff),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant staff (Manager/Admin only). Managers can only see their own restaurant staff."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    staff = await db.user.find_many(
-        where={
-            "restaurantId": restaurant_id,
-            "role": {"in": ["WAITER", "CHEF", "MANAGER"]}
-        },
-        order={"role": "asc"}
+
+    result = await db.execute(
+        select(User)
+        .where(
+            User.restaurantId == restaurant_id,
+            User.role.in_(["WAITER", "CHEF", "MANAGER"])
+        )
+        .order_by(User.role)
     )
-    
+    staff = result.scalars().all()
+
     return StaffListResponse(
         restaurantId=restaurant_id,
         restaurantName=restaurant.name,
-        staff=[StaffResponse.model_validate(staff_user) for staff_user in staff],
+        staff=[StaffResponse.model_validate(u) for u in staff],
         totalStaff=len(staff),
     )
 
@@ -299,7 +301,7 @@ async def invite_restaurant_staff(
     restaurant_id: int,
     staff_data: StaffInviteRequest,
     current_user = Depends(require_restaurant_staff),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a staff user for a restaurant and send an invite SMS."""
 
@@ -309,20 +311,20 @@ async def invite_restaurant_staff(
             detail="Role must be WAITER, CHEF, or MANAGER"
         )
 
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
 
-    duplicate_filters = [{"phone": staff_data.phone}]
+    filters = [User.phone == staff_data.phone]
     if staff_data.email:
-        duplicate_filters.append({"email": staff_data.email})
+        filters.append(User.email == staff_data.email)
 
-    existing_user = await db.user.find_first(
-        where={"OR": duplicate_filters}
-    )
+    existing_user = (
+        await db.execute(select(User).where(or_(*filters)))
+    ).scalar_one_or_none()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -330,18 +332,19 @@ async def invite_restaurant_staff(
         )
 
     temporary_password = generate_temporary_password()
-    staff_user = await db.user.create(
-        data={
-            "email": staff_data.email,
-            "phone": staff_data.phone,
-            "firstName": staff_data.firstName,
-            "lastName": staff_data.lastName,
-            "password": get_password_hash(temporary_password),
-            "role": staff_data.role.value,
-            "restaurantId": restaurant_id,
-            "isActive": True,
-        }
+    staff_user = User(
+        email=staff_data.email,
+        phone=staff_data.phone,
+        firstName=staff_data.firstName,
+        lastName=staff_data.lastName,
+        password=get_password_hash(temporary_password),
+        role=staff_data.role.value,
+        restaurantId=restaurant_id,
+        isActive=True,
     )
+    db.add(staff_user)
+    await db.commit()
+    await db.refresh(staff_user)
 
     active_sms_service = sms_service or SMSService()
     invite_message = (
@@ -351,7 +354,8 @@ async def invite_restaurant_staff(
     sms_result = active_sms_service.send_sms(str(staff_data.phone), invite_message)
 
     if not sms_result.get("success", False):
-        await db.user.delete(where={"id": staff_user.id})
+        await db.delete(staff_user)
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send invite SMS"
@@ -370,7 +374,7 @@ async def update_restaurant_staff(
     user_id: int,
     staff_update: StaffUpdate,
     current_user = Depends(require_restaurant_staff),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update a staff user's role or active status."""
 
@@ -380,31 +384,28 @@ async def update_restaurant_staff(
             detail="Role must be WAITER, CHEF, or MANAGER"
         )
 
-    staff_user = await db.user.find_unique(where={"id": user_id})
-    if not staff_user or staff_user.restaurantId != restaurant_id or not is_staff_role(UserRole(staff_user.role)):
+    staff_user = await db.get(User, user_id)
+    if not staff_user or staff_user.restaurantId != restaurant_id or staff_user.role.value not in STAFF_ROLE_VALUES:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff user not found"
         )
 
-    update_data = {}
-    if staff_update.role is not None:
-        update_data["role"] = staff_update.role.value
-    if staff_update.isActive is not None:
-        update_data["isActive"] = staff_update.isActive
-
-    if not update_data:
+    if staff_update.role is None and staff_update.isActive is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
 
-    updated_user = await db.user.update(
-        where={"id": user_id},
-        data=update_data,
-    )
+    if staff_update.role is not None:
+        staff_user.role = staff_update.role.value
+    if staff_update.isActive is not None:
+        staff_user.isActive = staff_update.isActive
 
-    return StaffResponse.model_validate(updated_user)
+    await db.commit()
+    await db.refresh(staff_user)
+
+    return StaffResponse.model_validate(staff_user)
 
 
 @router.delete("/{restaurant_id}/staff/{user_id}")
@@ -412,20 +413,18 @@ async def deactivate_restaurant_staff(
     restaurant_id: int,
     user_id: int,
     current_user = Depends(require_restaurant_staff),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Soft-delete staff by deactivating the account."""
 
-    staff_user = await db.user.find_unique(where={"id": user_id})
-    if not staff_user or staff_user.restaurantId != restaurant_id or not is_staff_role(UserRole(staff_user.role)):
+    staff_user = await db.get(User, user_id)
+    if not staff_user or staff_user.restaurantId != restaurant_id or staff_user.role.value not in STAFF_ROLE_VALUES:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff user not found"
         )
 
-    await db.user.update(
-        where={"id": user_id},
-        data={"isActive": False},
-    )
+    staff_user.isActive = False
+    await db.commit()
 
     return {"message": "Staff user deactivated successfully"}

@@ -2,6 +2,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_admin_user
@@ -13,6 +16,14 @@ from app.models.admin import (
     PlatformSettingsUpdate,
     RecentActivityItem,
     RestaurantAnalyticsItem,
+)
+from app.models.sqlalchemy_models import (
+    Order,
+    PlatformSettings,
+    Reservation,
+    Restaurant,
+    Review,
+    User,
 )
 
 
@@ -47,23 +58,27 @@ def get_window_start(range_value: AnalyticsRange, window_end: datetime) -> datet
     return window_end - timedelta(days=1)
 
 
-async def get_or_create_platform_settings(db: "Prisma"):
-    existing_rows = await db.platformsettings.find_many(
-        take=1,
-        order={"id": "asc"},
+async def get_or_create_platform_settings(db: AsyncSession):
+    result = await db.execute(
+        select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1)
     )
-    if existing_rows:
-        return existing_rows[0]
+    row = result.scalars().first()
+    if row:
+        return row
 
     try:
-        return await db.platformsettings.create(data=build_default_platform_settings())
+        obj = PlatformSettings(**build_default_platform_settings())
+        db.add(obj)
+        await db.commit()
+        await db.refresh(obj)
+        return obj
     except Exception as exc:
-        existing_rows = await db.platformsettings.find_many(
-            take=1,
-            order={"id": "asc"},
+        result = await db.execute(
+            select(PlatformSettings).order_by(PlatformSettings.id.asc()).limit(1)
         )
-        if existing_rows:
-            return existing_rows[0]
+        row = result.scalars().first()
+        if row:
+            return row
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error creating platform settings: {str(exc)}",
@@ -126,41 +141,60 @@ def build_recent_activity_items(orders, reservations, reviews):
 @router.get("/stats", response_model=AdminStatsResponse)
 async def get_admin_stats(
     current_user=Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get platform-wide dashboard stats (Admin only)."""
 
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_restaurants = await db.restaurant.count()
-    total_orders_today = await db.order.count(
-        where={"orderTime": {"gte": start_of_today}}
-    )
-    active_users = await db.user.count(where={"isActive": True})
+    total_restaurants = (
+        await db.execute(select(func.count(Restaurant.id)))
+    ).scalar()
+    total_orders_today = (
+        await db.execute(
+            select(func.count(Order.id)).where(Order.orderTime >= start_of_today)
+        )
+    ).scalar()
+    active_users = (
+        await db.execute(
+            select(func.count(User.id)).where(User.isActive == True)
+        )
+    ).scalar()
 
-    todays_orders = await db.order.find_many(
-        where={"orderTime": {"gte": start_of_today}}
-    )
+    todays_orders = (
+        await db.execute(
+            select(Order).where(Order.orderTime >= start_of_today)
+        )
+    ).scalars().all()
     revenue_today = round(
         sum(order.totalAmount for order in todays_orders if order.status != "CANCELLED"),
         2,
     )
 
-    recent_orders = await db.order.find_many(
-        include={"restaurant": {"select": {"name": True}}},
-        order={"orderTime": "desc"},
-        take=5,
-    )
-    recent_reservations = await db.reservation.find_many(
-        include={"restaurant": {"select": {"name": True}}},
-        order={"createdAt": "desc"},
-        take=3,
-    )
-    recent_reviews = await db.review.find_many(
-        include={"restaurant": {"select": {"name": True}}},
-        order={"createdAt": "desc"},
-        take=3,
-    )
+    recent_orders = (
+        await db.execute(
+            select(Order)
+            .options(selectinload(Order.restaurant))
+            .order_by(Order.orderTime.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+    recent_reservations = (
+        await db.execute(
+            select(Reservation)
+            .options(selectinload(Reservation.restaurant))
+            .order_by(Reservation.createdAt.desc())
+            .limit(3)
+        )
+    ).scalars().all()
+    recent_reviews = (
+        await db.execute(
+            select(Review)
+            .options(selectinload(Review.restaurant))
+            .order_by(Review.createdAt.desc())
+            .limit(3)
+        )
+    ).scalars().all()
 
     return AdminStatsResponse(
         totalRestaurants=total_restaurants,
@@ -179,39 +213,50 @@ async def get_admin_stats(
 async def get_admin_analytics(
     time_range: AnalyticsRange = Query(AnalyticsRange.DAY, alias="range"),
     current_user=Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get platform-wide analytics for a requested time window (Admin only)."""
 
     window_end = datetime.now()
     window_start = get_window_start(time_range, window_end)
 
-    orders = await db.order.find_many(
-        where={
-            "orderTime": {
-                "gte": window_start,
-                "lte": window_end,
-            }
-        },
-        include={"restaurant": {"select": {"name": True}}},
-    )
-    total_restaurants = await db.restaurant.count()
-    total_reservations = await db.reservation.count(
-        where={
-            "createdAt": {
-                "gte": window_start,
-                "lte": window_end,
-            }
-        }
-    )
-    total_reviews = await db.review.count(
-        where={
-            "createdAt": {
-                "gte": window_start,
-                "lte": window_end,
-            }
-        }
-    )
+    orders = (
+        await db.execute(
+            select(Order)
+            .where(
+                and_(
+                    Order.orderTime >= window_start,
+                    Order.orderTime <= window_end,
+                )
+            )
+            .options(selectinload(Order.restaurant))
+        )
+    ).scalars().all()
+    total_restaurants = (
+        await db.execute(select(func.count(Restaurant.id)))
+    ).scalar()
+    total_reservations = (
+        await db.execute(
+            select(func.count(Reservation.id))
+            .where(
+                and_(
+                    Reservation.createdAt >= window_start,
+                    Reservation.createdAt <= window_end,
+                )
+            )
+        )
+    ).scalar()
+    total_reviews = (
+        await db.execute(
+            select(func.count(Review.id))
+            .where(
+                and_(
+                    Review.createdAt >= window_start,
+                    Review.createdAt <= window_end,
+                )
+            )
+        )
+    ).scalar()
 
     orders_by_status: Dict[str, int] = {}
     restaurant_breakdown: Dict[int, Dict[str, Any]] = {}
@@ -276,7 +321,7 @@ async def get_admin_analytics(
 @router.get("/settings", response_model=PlatformSettingsResponse)
 async def get_platform_settings(
     current_user=Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get the single platform settings row (Admin only)."""
 
@@ -288,7 +333,7 @@ async def get_platform_settings(
 async def update_platform_settings(
     settings_data: PlatformSettingsUpdate,
     current_user=Depends(get_current_admin_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update the single platform settings row (Admin only)."""
 
@@ -306,11 +351,11 @@ async def update_platform_settings(
         )
 
     try:
-        updated_settings = await db.platformsettings.update(
-            where={"id": settings_row.id},
-            data=update_data,
-        )
-        return PlatformSettingsResponse.model_validate(updated_settings)
+        for field, value in update_data.items():
+            setattr(settings_row, field, value)
+        await db.commit()
+        await db.refresh(settings_row)
+        return PlatformSettingsResponse.model_validate(settings_row)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

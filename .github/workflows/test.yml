@@ -27,8 +27,8 @@ jobs:
       - name: Install dev dependencies
         run: pip install -r requirements-dev.txt
 
-      - name: Generate Prisma client
-        run: prisma generate
+      - name: Run Alembic migrations
+        run: alembic upgrade head
 
       - name: Run tests
         run: pytest --tb=short -q

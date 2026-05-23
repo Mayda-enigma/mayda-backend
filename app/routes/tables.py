@@ -1,5 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_, or_
+from sqlalchemy.orm import selectinload
 from app.models.table import (
     CurrentOccupantInfo, TableCheckinResponse, TableCreate,
     TableResponse, TableListResponse, TableStatus, TableUpdate
@@ -8,6 +11,9 @@ from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_manager_or_admin, get_current_staff_user,
     get_current_user_optional
+)
+from app.models.sqlalchemy_models import (
+    Table, Restaurant, TableSession, Order, User, OrderItem
 )
 
 
@@ -29,27 +35,27 @@ async def get_restaurant_tables(
     restaurant_id: int,
     active_only: bool = Query(True),
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get tables for a restaurant (public endpoint for customers to see available tables)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    where_clause = {"restaurantId": restaurant_id}
+
+    where_conditions = [Table.restaurantId == restaurant_id]
     if active_only:
-        where_clause["isActive"] = True
-    
-    tables = await db.table.find_many(
-        where=where_clause,
-        order={"number": "asc"}
-    )
-    
+        where_conditions.append(Table.isActive == True)
+
+    tables = (await db.execute(
+        select(Table)
+        .where(and_(*where_conditions))
+        .order_by(Table.number.asc())
+    )).scalars().all()
+
     return [TableListResponse.model_validate(table) for table in tables]
 
 
@@ -57,18 +63,18 @@ async def get_restaurant_tables(
 async def get_table(
     table_id: int,
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get table by ID (public endpoint)."""
-    
-    table = await db.table.find_unique(where={"id": table_id})
-    
+
+    table = await db.get(Table, table_id)
+
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Table not found"
         )
-    
+
     return TableResponse.model_validate(table)
 
 
@@ -76,54 +82,53 @@ async def get_table(
 async def create_table(
     table_data: TableCreate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new table (Manager/Admin only). Managers can only create tables for their restaurant."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": table_data.restaurantId})
+
+    restaurant = await db.get(Restaurant, table_data.restaurantId)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    # Check permissions - managers can only create tables for their own restaurant
+
     if current_user.role != "ADMIN" and current_user.restaurantId != table_data.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create tables for your own restaurant"
         )
-    
-    # Check if table number already exists in this restaurant
-    existing_table = await db.table.find_first(
-        where={
-            "restaurantId": table_data.restaurantId,
-            "number": table_data.number
-        }
-    )
-    
+
+    existing_table = (await db.execute(
+        select(Table)
+        .where(and_(
+            Table.restaurantId == table_data.restaurantId,
+            Table.number == table_data.number
+        ))
+    )).scalar_one_or_none()
+
     if existing_table:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Table number {table_data.number} already exists in this restaurant"
         )
-    
+
     try:
-        table = await db.table.create(
-            data={
-                "restaurantId": table_data.restaurantId,
-                "number": table_data.number,
-                "capacity": table_data.capacity,
-                "isActive": table_data.isActive,
-                "status": table_data.status.value,
-                "qrCode": table_data.qrCode,
-                "nfcTag": table_data.nfcTag
-            }
+        table = Table(
+            restaurantId=table_data.restaurantId,
+            number=table_data.number,
+            capacity=table_data.capacity,
+            isActive=table_data.isActive,
+            status=table_data.status.value,
+            qrCode=table_data.qrCode,
+            nfcTag=table_data.nfcTag
         )
-        
+        db.add(table)
+        await db.commit()
+        await db.refresh(table)
+
         return TableResponse.model_validate(table)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -136,42 +141,39 @@ async def update_table(
     table_id: int,
     table_data: TableUpdate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update table (Manager/Admin only). Managers can only update tables in their restaurant."""
-    
-    # Check if table exists
-    table = await db.table.find_unique(where={"id": table_id})
+
+    table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Table not found"
         )
-    
-    # Check permissions - managers can only update tables in their own restaurant
+
     if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update tables in your own restaurant"
         )
-    
-    # If updating table number, check for conflicts
+
     if table_data.number and table_data.number != table.number:
-        existing_table = await db.table.find_first(
-            where={
-                "restaurantId": table.restaurantId,
-                "number": table_data.number,
-                "id": {"not": table_id}
-            }
-        )
-        
+        existing_table = (await db.execute(
+            select(Table)
+            .where(and_(
+                Table.restaurantId == table.restaurantId,
+                Table.number == table_data.number,
+                Table.id != table_id
+            ))
+        )).scalar_one_or_none()
+
         if existing_table:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Table number {table_data.number} already exists in this restaurant"
             )
-    
-    # Prepare update data
+
     update_data = {}
     for field, value in table_data.model_dump(exclude_unset=True).items():
         if value is not None:
@@ -179,21 +181,21 @@ async def update_table(
 
     if "status" in update_data:
         update_data["status"] = update_data["status"].value
-    
+
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
-    
+
     try:
-        updated_table = await db.table.update(
-            where={"id": table_id},
-            data=update_data
-        )
-        
-        return TableResponse.model_validate(updated_table)
-        
+        for field, value in update_data.items():
+            setattr(table, field, value)
+        await db.commit()
+        await db.refresh(table)
+
+        return TableResponse.model_validate(table)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -205,43 +207,42 @@ async def update_table(
 async def delete_table(
     table_id: int,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete table (Manager/Admin only). Managers can only delete tables from their restaurant."""
-    
-    # Check if table exists
-    table = await db.table.find_unique(where={"id": table_id})
+
+    table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Table not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete tables from your own restaurant"
         )
-    
-    # Check if table has active orders or reservations
-    active_orders = await db.order.count(
-        where={
-            "tableId": table_id,
-            "status": {"in": ["PENDING", "CONFIRMED", "PREPARING", "READY"]}
-        }
-    )
-    
+
+    active_orders = (await db.execute(
+        select(func.count(Order.id))
+        .where(and_(
+            Order.tableId == table_id,
+            Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY"])
+        ))
+    )).scalar()
+
     if active_orders > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete table with active orders"
         )
-    
+
     try:
-        await db.table.delete(where={"id": table_id})
+        await db.delete(table)
+        await db.commit()
         return {"message": f"Table {table.number} deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -253,36 +254,33 @@ async def delete_table(
 async def toggle_table_status(
     table_id: int,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Toggle table active status (Staff only - for their restaurant)."""
-    
-    # Check if table exists
-    table = await db.table.find_unique(where={"id": table_id})
+
+    table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Table not found"
         )
-    
-    # Check permissions - staff can only manage tables in their own restaurant
+
     if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only manage tables in your own restaurant"
         )
-    
+
     try:
-        updated_table = await db.table.update(
-            where={"id": table_id},
-            data={"isActive": not table.isActive}
-        )
-        
+        table.isActive = not table.isActive
+        await db.commit()
+        await db.refresh(table)
+
         return {
-            "message": f"Table {table.number} {'activated' if updated_table.isActive else 'deactivated'} successfully",
-            "table": TableResponse.model_validate(updated_table)
+            "message": f"Table {table.number} {'activated' if table.isActive else 'deactivated'} successfully",
+            "table": TableResponse.model_validate(table)
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -294,7 +292,7 @@ async def toggle_table_status(
 async def check_in_table(
     table_id: int,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Open a table session after a QR scan (Waiter/Manager/Admin only)."""
 
@@ -304,7 +302,7 @@ async def check_in_table(
             detail="Waiter access required"
         )
 
-    table = await db.table.find_unique(where={"id": table_id})
+    table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -323,45 +321,42 @@ async def check_in_table(
             detail="Inactive tables cannot be checked in"
         )
 
-    active_session = await db.tablesession.find_first(
-        where={"tableId": table_id, "isActive": True},
-        include={
-            "waiter": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                }
-            }
-        }
-    )
+    active_session = (await db.execute(
+        select(TableSession)
+        .where(and_(
+            TableSession.tableId == table_id,
+            TableSession.isActive == True
+        ))
+        .options(selectinload(TableSession.waiter))
+    )).scalar_one_or_none()
 
-    if table.status == TableStatus.OCCUPIED.value or active_session:
+    if table.status.value == TableStatus.OCCUPIED.value or active_session:
         occupant_info = build_current_occupant_info(active_session) if active_session else None
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "message": "Table is already occupied",
                 "tableId": table.id,
-                "status": table.status,
+                "status": table.status.value,
                 "currentOccupant": occupant_info.model_dump() if occupant_info else None,
             }
         )
 
-    session = await db.tablesession.create(
-        data={
-            "tableId": table.id,
-            "waiterId": current_user.id,
-        }
+    session = TableSession(
+        tableId=table.id,
+        waiterId=current_user.id,
     )
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
 
-    updated_table = await db.table.update(
-        where={"id": table_id},
-        data={"status": TableStatus.OCCUPIED.value},
-    )
+    table.status = TableStatus.OCCUPIED.value
+    await db.commit()
+    await db.refresh(table)
 
     return TableCheckinResponse(
-        tableId=updated_table.id,
-        status=TableStatus(updated_table.status),
+        tableId=table.id,
+        status=TableStatus(table.status.value),
         sessionId=session.id,
     )
 
@@ -370,46 +365,36 @@ async def check_in_table(
 async def get_table_current_orders(
     table_id: int,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get current orders for a table (Staff only)."""
-    
-    # Check if table exists
-    table = await db.table.find_unique(where={"id": table_id})
+
+    table = await db.get(Table, table_id)
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Table not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only view orders for tables in your own restaurant"
         )
-    
-    # Get current orders for this table
-    orders = await db.order.find_many(
-        where={
-            "tableId": table_id,
-            "status": {"in": ["PENDING", "CONFIRMED", "PREPARING", "READY"]}
-        },
-        include={
-            "items": {
-                "include": {"dish": True}
-            },
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
-        },
-        order={"orderTime": "desc"}
-    )
-    
+
+    orders = (await db.execute(
+        select(Order)
+        .where(and_(
+            Order.tableId == table_id,
+            Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY"])
+        ))
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.dish),
+            selectinload(Order.user)
+        )
+        .order_by(Order.orderTime.desc())
+    )).scalars().all()
+
     return {
         "table_id": table_id,
         "table_number": table.number,
@@ -422,54 +407,55 @@ async def get_table_current_orders(
 async def get_tables_availability(
     restaurant_id: int,
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get table availability status for a restaurant (public endpoint for customers)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    # Get all active tables with their current order status
-    tables = await db.table.find_many(
-        where={
-            "restaurantId": restaurant_id,
-            "isActive": True
-        },
-        include={
-            "orders": {
-                "where": {
-                    "status": {"in": ["PENDING", "CONFIRMED", "PREPARING", "READY"]}
-                },
-                "select": {
-                    "id": True,
-                    "status": True,
-                    "orderTime": True
-                }
-            }
-        },
-        order={"number": "asc"}
-    )
-    
-    # Format availability data
+
+    tables = (await db.execute(
+        select(Table)
+        .where(and_(
+            Table.restaurantId == restaurant_id,
+            Table.isActive == True
+        ))
+        .order_by(Table.number.asc())
+    )).scalars().all()
+
+    active_statuses = ["PENDING", "CONFIRMED", "PREPARING", "READY"]
+    if tables:
+        count_result = (await db.execute(
+            select(Order.tableId, func.count(Order.id))
+            .where(and_(
+                Order.tableId.in_([t.id for t in tables]),
+                Order.status.in_(active_statuses)
+            ))
+            .group_by(Order.tableId)
+        )).all()
+        order_counts = {row[0]: row[1] for row in count_result}
+    else:
+        order_counts = {}
+
     availability = []
     for table in tables:
-        has_active_orders = len(table.orders) > 0
-        is_occupied = table.status == TableStatus.OCCUPIED.value or has_active_orders
+        count = order_counts.get(table.id, 0)
+        has_active_orders = count > 0
+        is_occupied = table.status.value == TableStatus.OCCUPIED.value or has_active_orders
         availability.append({
             "id": table.id,
             "number": table.number,
             "capacity": table.capacity,
-            "status": table.status,
+            "status": table.status.value,
             "qrCode": table.qrCode,
             "isOccupied": is_occupied,
-            "activeOrders": len(table.orders)
+            "activeOrders": count
         })
-    
+
     return {
         "restaurant_id": restaurant_id,
         "restaurant_name": restaurant.name,

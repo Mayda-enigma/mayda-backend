@@ -1,13 +1,15 @@
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from twilio.base.exceptions import TwilioException
 from twilio.rest import Client
+from sqlalchemy import select, update as sa_update
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.sqlalchemy_models import OtpCode, OtpPurpose
 from app.utils.logging import logger
 
 
@@ -119,19 +121,20 @@ class SMSService:
         """Generate and send OTP code to user."""
         logger.debug("send_otp called: user_id={}, phone={}, purpose={}", user_id, phone, purpose)
 
-        db = get_db()
+        db = await get_db()
 
         try:
             otp_code = self.generate_otp_code()
             logger.debug("Generated OTP for user {}: {}", user_id, otp_code)
 
-            expires_at = datetime.utcnow() + timedelta(minutes=20)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=20)
             message = f"Your Caravane verification code is: {otp_code}. Valid for 20 minutes."
             sms_result = self.send_sms(str(phone), message)
             logger.debug("SMS send result: {}", sms_result)
 
             if not sms_result.get("success", False):
                 logger.error("Failed to send OTP SMS to user {}", user_id)
+                await db.close()
                 return {
                     "success": False,
                     "error": "Failed to send SMS",
@@ -139,25 +142,29 @@ class SMSService:
                 }
 
             try:
-                await db.otpcode.update_many(
-                    where={
-                        "userId": user_id,
-                        "purpose": purpose,
-                        "isUsed": False,
-                    },
-                    data={"isUsed": True},
+                await db.execute(
+                    sa_update(OtpCode)
+                    .where(
+                        OtpCode.userId == user_id,
+                        OtpCode.purpose == OtpPurpose(purpose),
+                        OtpCode.isUsed == False,
+                    )
+                    .values(isUsed=True)
                 )
+                await db.commit()
 
-                otp_record = await db.otpcode.create(
-                    data={
-                        "userId": user_id,
-                        "code": otp_code,
-                        "purpose": purpose,
-                        "expiresAt": expires_at,
-                    }
+                otp_record = OtpCode(
+                    userId=user_id,
+                    code=otp_code,
+                    purpose=OtpPurpose(purpose),
+                    expiresAt=expires_at,
                 )
+                db.add(otp_record)
+                await db.commit()
+                await db.refresh(otp_record)
                 logger.info("OTP saved to database with ID: {}", otp_record.id)
             except Exception as db_error:
+                await db.rollback()
                 logger.warning("Could not save OTP to database: {}", db_error)
 
             return {
@@ -173,6 +180,8 @@ class SMSService:
                 "error": f"Error sending OTP: {e}",
                 "error_type": e.__class__.__name__,
             }
+        finally:
+            await db.close()
 
     async def verify_otp(self, user_id: int, code: str, purpose: str = "STAFF_AUTH") -> bool:
         """Verify OTP code for user."""
@@ -180,24 +189,23 @@ class SMSService:
             logger.debug("[DEVELOPMENT] Accepting hardcoded OTP for user {}", user_id)
             return True
 
-        db = get_db()
+        db = await get_db()
 
         try:
-            otp_record = await db.otpcode.find_first(
-                where={
-                    "userId": user_id,
-                    "code": code,
-                    "purpose": purpose,
-                    "isUsed": False,
-                    "expiresAt": {"gt": datetime.utcnow()},
-                }
+            result = await db.execute(
+                select(OtpCode).where(
+                    OtpCode.userId == user_id,
+                    OtpCode.code == code,
+                    OtpCode.purpose == OtpPurpose(purpose),
+                    OtpCode.isUsed == False,
+                    OtpCode.expiresAt > datetime.now(timezone.utc),
+                )
             )
+            otp_record = result.scalar_one_or_none()
 
             if otp_record:
-                await db.otpcode.update(
-                    where={"id": otp_record.id},
-                    data={"isUsed": True},
-                )
+                otp_record.isUsed = True
+                await db.commit()
                 return True
 
             return False
@@ -208,6 +216,8 @@ class SMSService:
                 logger.debug("[DEVELOPMENT] Database error - checking for hardcoded OTP")
                 return code == "123456"
             return False
+        finally:
+            await db.close()
 
 
 def get_sms_service() -> Optional[SMSService]:

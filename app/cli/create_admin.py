@@ -2,9 +2,11 @@
 
 import asyncio
 
+from sqlalchemy import select, or_
+
 from app.core.database import connect_db, disconnect_db, get_db
 from app.auth.jwt import get_password_hash
-from app.models.user import UserRole
+from app.models.sqlalchemy_models import User, UserRole
 
 
 async def create_admin_user(
@@ -19,14 +21,10 @@ async def create_admin_user(
     try:
         db = get_db()
 
-        existing_user = await db.user.find_first(
-            where={
-                "OR": [
-                    {"email": email},
-                    {"phone": phone},
-                ]
-            }
+        result = await db.execute(
+            select(User).where(or_(User.email == email, User.phone == phone))
         )
+        existing_user = result.scalar_one_or_none()
 
         if existing_user:
             if existing_user.email == email:
@@ -37,17 +35,18 @@ async def create_admin_user(
 
         hashed_password = get_password_hash(password)
 
-        admin_user = await db.user.create(
-            data={
-                "email": email,
-                "phone": phone,
-                "firstName": first_name,
-                "lastName": last_name,
-                "password": hashed_password,
-                "role": UserRole.ADMIN.value,
-                "isActive": True,
-            }
+        admin_user = User(
+            email=email,
+            phone=phone,
+            firstName=first_name,
+            lastName=last_name,
+            password=hashed_password,
+            role=UserRole.ADMIN,
+            isActive=True,
         )
+        db.add(admin_user)
+        await db.commit()
+        await db.refresh(admin_user)
 
         print("Admin user created successfully!")
         print(f"Email: {admin_user.email}")

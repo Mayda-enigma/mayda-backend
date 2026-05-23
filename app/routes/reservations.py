@@ -1,12 +1,16 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_, or_
+from sqlalchemy.orm import selectinload
 from app.models.reservation import (
     ReservationCreate, ReservationUpdate, ReservationResponse, ReservationListResponse,
     PublicReservationCreate, ReservationStatusUpdate, ReservationStatus,
     ReservationAvailabilityRequest, ReservationAvailabilityResponse, AvailableTable
 )
 from app.core.database import get_db_session
+from app.models.sqlalchemy_models import Reservation, Restaurant, Table, User
 from app.middleware.roles import (
     get_current_staff_user, get_current_user, get_current_user_optional
 )
@@ -19,7 +23,7 @@ router = APIRouter(prefix="/reservations", tags=["Reservations"])
 # ==================== PUBLIC RESERVATION ENDPOINTS ====================
 
 @router.post("/availability", response_model=ReservationAvailabilityResponse)
-async def check_availability(request: ReservationAvailabilityRequest, db: "Prisma" = Depends(get_db_session)):
+async def check_availability(request: ReservationAvailabilityRequest, db: AsyncSession = Depends(get_db_session)):
     """
     Check table availability for a specific time slot (Public endpoint).
     
@@ -28,7 +32,7 @@ async def check_availability(request: ReservationAvailabilityRequest, db: "Prism
     """
     
     # Validate restaurant exists and is active
-    restaurant = await db.restaurant.find_unique(where={"id": request.restaurantId})
+    restaurant = await db.get(Restaurant, request.restaurantId)
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -36,13 +40,15 @@ async def check_availability(request: ReservationAvailabilityRequest, db: "Prism
         )
     
     # Get all active tables for the restaurant
-    all_tables = await db.table.find_many(
-        where={
-            "restaurantId": request.restaurantId,
-            "isActive": True
-        },
-        order={"number": "asc"}
+    result = await db.execute(
+        select(Table)
+        .where(
+            Table.restaurantId == request.restaurantId,
+            Table.isActive == True
+        )
+        .order_by(Table.number.asc())
     )
+    all_tables = result.scalars().all()
     
     if not all_tables:
         return ReservationAvailabilityResponse(
@@ -64,32 +70,29 @@ async def check_availability(request: ReservationAvailabilityRequest, db: "Prism
             )
     
     # Check for conflicting reservations
-    conflicting_reservations = await db.reservation.find_many(
-        where={
-            "restaurantId": request.restaurantId,
-            "status": {"in": ["PENDING", "CONFIRMED"]},
-            "OR": [
-                {
-                    "AND": [
-                        {"reservationStart": {"lte": request.reservationStart}},
-                        {"reservationEnd": {"gt": request.reservationStart}}
-                    ]
-                },
-                {
-                    "AND": [
-                        {"reservationStart": {"lt": request.reservationEnd}},
-                        {"reservationEnd": {"gte": request.reservationEnd}}
-                    ]
-                },
-                {
-                    "AND": [
-                        {"reservationStart": {"gte": request.reservationStart}},
-                        {"reservationEnd": {"lte": request.reservationEnd}}
-                    ]
-                }
-            ]
-        }
+    result = await db.execute(
+        select(Reservation).where(
+            and_(
+                Reservation.restaurantId == request.restaurantId,
+                Reservation.status.in_(["PENDING", "CONFIRMED"]),
+                or_(
+                    and_(
+                        Reservation.reservationStart <= request.reservationStart,
+                        Reservation.reservationEnd > request.reservationStart
+                    ),
+                    and_(
+                        Reservation.reservationStart < request.reservationEnd,
+                        Reservation.reservationEnd >= request.reservationEnd
+                    ),
+                    and_(
+                        Reservation.reservationStart >= request.reservationStart,
+                        Reservation.reservationEnd <= request.reservationEnd
+                    )
+                )
+            )
+        )
     )
+    conflicting_reservations = result.scalars().all()
     
     # Get table IDs that are reserved during the requested time
     reserved_table_ids = set()
@@ -121,7 +124,7 @@ async def check_availability(request: ReservationAvailabilityRequest, db: "Prism
 async def create_public_reservation(
     reservation_data: PublicReservationCreate,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create reservation without customer authentication (Staff only - for phone bookings/walk-ins)."""
     
@@ -140,7 +143,7 @@ async def create_public_reservation(
         )
     
     # Validate restaurant
-    restaurant = await db.restaurant.find_unique(where={"id": reservation_data.restaurantId})
+    restaurant = await db.get(Restaurant, reservation_data.restaurantId)
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -149,12 +152,13 @@ async def create_public_reservation(
     
     # Validate table if specified
     if reservation_data.tableId:
-        table = await db.table.find_unique(
-            where={
-                "id": reservation_data.tableId,
-                "restaurantId": reservation_data.restaurantId
-            }
+        result = await db.execute(
+            select(Table).where(
+                Table.id == reservation_data.tableId,
+                Table.restaurantId == reservation_data.restaurantId
+            )
         )
+        table = result.scalar_one_or_none()
         if not table or not table.isActive:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -167,7 +171,7 @@ async def create_public_reservation(
             reservationStart=reservation_data.reservationStart,
             reservationEnd=reservation_data.reservationEnd
         )
-        availability = await check_availability(availability_request)
+        availability = await check_availability(availability_request, db)
         
         if not availability.available or not any(t.id == reservation_data.tableId for t in availability.availableTables):
             raise HTTPException(
@@ -177,58 +181,50 @@ async def create_public_reservation(
     
     try:
         # Create guest user or find existing one
-        guest_user = await db.user.find_first(
-            where={"phone": int(reservation_data.customerPhone)}
+        result = await db.execute(
+            select(User).where(User.phone == int(reservation_data.customerPhone))
         )
+        guest_user = result.scalar_one_or_none()
         
         if not guest_user:
             # Create temporary guest user
-            guest_user = await db.user.create(
-                data={
-                    "phone": int(reservation_data.customerPhone),
-                    "firstName": reservation_data.customerName.split()[0] if reservation_data.customerName else "Guest",
-                    "lastName": " ".join(reservation_data.customerName.split()[1:]) if len(reservation_data.customerName.split()) > 1 else "",
-                    "email": reservation_data.customerEmail,
-                    "role": "CLIENT",
-                    "password": "temp_password",  # Temporary password for guest users
-                    "isActive": True
-                }
+            guest_user = User(
+                phone=int(reservation_data.customerPhone),
+                firstName=reservation_data.customerName.split()[0] if reservation_data.customerName else "Guest",
+                lastName=" ".join(reservation_data.customerName.split()[1:]) if len(reservation_data.customerName.split()) > 1 else "",
+                email=reservation_data.customerEmail,
+                role="CLIENT",
+                password="temp_password",
+                isActive=True
             )
+            db.add(guest_user)
+            await db.commit()
+            await db.refresh(guest_user)
         
         # Create reservation
-        reservation = await db.reservation.create(
-            data={
-                "userId": guest_user.id,
-                "restaurantId": reservation_data.restaurantId,
-                "tableId": reservation_data.tableId,
-                "reservationStart": reservation_data.reservationStart,
-                "reservationEnd": reservation_data.reservationEnd,
-                "status": ReservationStatus.PENDING.value
-            }
+        reservation = Reservation(
+            userId=guest_user.id,
+            restaurantId=reservation_data.restaurantId,
+            tableId=reservation_data.tableId,
+            reservationStart=reservation_data.reservationStart,
+            reservationEnd=reservation_data.reservationEnd,
+            status=ReservationStatus.PENDING.value
         )
+        db.add(reservation)
+        await db.commit()
+        await db.refresh(reservation)
         
         # Fetch complete reservation with relations
-        complete_reservation = await db.reservation.find_unique(
-            where={"id": reservation.id},
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
-                "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
-            }
+        result = await db.execute(
+            select(Reservation)
+            .where(Reservation.id == reservation.id)
+            .options(
+                selectinload(Reservation.user),
+                selectinload(Reservation.table),
+                selectinload(Reservation.restaurant)
+            )
         )
+        complete_reservation = result.scalar_one()
 
         await create_restaurant_event_notifications(
             db=db,
@@ -260,14 +256,12 @@ async def create_public_reservation(
 async def create_reservation(
     reservation_data: ReservationCreate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create reservation for authenticated user using their stored profile information."""
     
     # Get user's complete profile for contact information
-    user_profile = await db.user.find_unique(
-        where={"id": current_user.id}
-    )
+    user_profile = await db.get(User, current_user.id)
     
     if not user_profile:
         raise HTTPException(
@@ -283,7 +277,7 @@ async def create_reservation(
         )
     
     # Validate restaurant
-    restaurant = await db.restaurant.find_unique(where={"id": reservation_data.restaurantId})
+    restaurant = await db.get(Restaurant, reservation_data.restaurantId)
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -292,12 +286,13 @@ async def create_reservation(
     
     # Validate table if specified
     if reservation_data.tableId:
-        table = await db.table.find_unique(
-            where={
-                "id": reservation_data.tableId,
-                "restaurantId": reservation_data.restaurantId
-            }
+        result = await db.execute(
+            select(Table).where(
+                Table.id == reservation_data.tableId,
+                Table.restaurantId == reservation_data.restaurantId
+            )
         )
+        table = result.scalar_one_or_none()
         if not table or not table.isActive:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -310,7 +305,7 @@ async def create_reservation(
             reservationStart=reservation_data.reservationStart,
             reservationEnd=reservation_data.reservationEnd
         )
-        availability = await check_availability(availability_request)
+        availability = await check_availability(availability_request, db)
         
         if not availability.available or not any(t.id == reservation_data.tableId for t in availability.availableTables):
             raise HTTPException(
@@ -319,39 +314,29 @@ async def create_reservation(
             )
     
     try:
-        reservation = await db.reservation.create(
-            data={
-                "userId": current_user.id,
-                "restaurantId": reservation_data.restaurantId,
-                "tableId": reservation_data.tableId,
-                "reservationStart": reservation_data.reservationStart,
-                "reservationEnd": reservation_data.reservationEnd,
-                "status": ReservationStatus.PENDING.value
-            }
+        reservation = Reservation(
+            userId=current_user.id,
+            restaurantId=reservation_data.restaurantId,
+            tableId=reservation_data.tableId,
+            reservationStart=reservation_data.reservationStart,
+            reservationEnd=reservation_data.reservationEnd,
+            status=ReservationStatus.PENDING.value
         )
+        db.add(reservation)
+        await db.commit()
+        await db.refresh(reservation)
         
         # Fetch complete reservation
-        complete_reservation = await db.reservation.find_unique(
-            where={"id": reservation.id},
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
-                "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
-            }
+        result = await db.execute(
+            select(Reservation)
+            .where(Reservation.id == reservation.id)
+            .options(
+                selectinload(Reservation.user),
+                selectinload(Reservation.table),
+                selectinload(Reservation.restaurant)
+            )
         )
+        complete_reservation = result.scalar_one()
 
         await create_restaurant_event_notifications(
             db=db,
@@ -384,31 +369,27 @@ async def get_my_reservations(
     limit: int = Query(50, ge=1, le=100),
     status: Optional[ReservationStatus] = Query(None),
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get current user's reservations."""
     
-    where_clause = {"userId": current_user.id}
+    conditions = [Reservation.userId == current_user.id]
     if status:
-        where_clause["status"] = status.value
+        conditions.append(Reservation.status == status.value)
     
-    reservations = await db.reservation.find_many(
-        where=where_clause,
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            },
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
-        },
-        skip=skip,
-        take=limit,
-        order={"reservationStart": "desc"}
+    result = await db.execute(
+        select(Reservation)
+        .where(*conditions)
+        .options(
+            selectinload(Reservation.user),
+            selectinload(Reservation.table),
+            selectinload(Reservation.restaurant)
+        )
+        .offset(skip)
+        .limit(limit)
+        .order_by(Reservation.reservationStart.desc())
     )
+    reservations = result.scalars().all()
     
     # Format response
     reservation_list = []
@@ -427,31 +408,20 @@ async def get_my_reservations(
 async def get_reservation(
     reservation_id: int,
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get reservation by ID. Users can only see their own reservations, staff can see restaurant reservations."""
     
-    reservation = await db.reservation.find_unique(
-        where={"id": reservation_id},
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True,
-                    "email": True
-                }
-            },
-            "table": True,
-            "restaurant": {
-                "select": {
-                    "name": True,
-                    "phone": True,
-                    "email": True
-                }
-            }
-        }
+    result = await db.execute(
+        select(Reservation)
+        .where(Reservation.id == reservation_id)
+        .options(
+            selectinload(Reservation.user),
+            selectinload(Reservation.table),
+            selectinload(Reservation.restaurant)
+        )
     )
+    reservation = result.scalar_one_or_none()
     
     if not reservation:
         raise HTTPException(
@@ -492,7 +462,7 @@ async def get_restaurant_reservations(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get reservations for a restaurant (Staff only)."""
     
@@ -503,43 +473,41 @@ async def get_restaurant_reservations(
             detail="You can only view reservations from your own restaurant"
         )
     
-    where_clause = {"restaurantId": restaurant_id}
+    conditions = [Reservation.restaurantId == restaurant_id]
     
     if status:
-        where_clause["status"] = status.value
+        conditions.append(Reservation.status == status.value)
     
     if date:
         try:
             target_date = datetime.strptime(date, "%Y-%m-%d").date()
             start_of_day = datetime.combine(target_date, datetime.min.time())
             end_of_day = datetime.combine(target_date, datetime.max.time())
-            where_clause["reservationStart"] = {
-                "gte": start_of_day,
-                "lte": end_of_day
-            }
+            conditions.append(
+                and_(
+                    Reservation.reservationStart >= start_of_day,
+                    Reservation.reservationStart <= end_of_day
+                )
+            )
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid date format. Use YYYY-MM-DD"
             )
     
-    reservations = await db.reservation.find_many(
-        where=where_clause,
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            },
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
-        },
-        skip=skip,
-        take=limit,
-        order={"reservationStart": "asc"}
+    result = await db.execute(
+        select(Reservation)
+        .where(*conditions)
+        .options(
+            selectinload(Reservation.user),
+            selectinload(Reservation.table),
+            selectinload(Reservation.restaurant)
+        )
+        .offset(skip)
+        .limit(limit)
+        .order_by(Reservation.reservationStart.asc())
     )
+    reservations = result.scalars().all()
     
     # Format response
     reservation_list = []
@@ -559,12 +527,12 @@ async def update_reservation_status(
     reservation_id: int,
     status_update: ReservationStatusUpdate,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update reservation status (Staff only)."""
     
     # Check if reservation exists
-    reservation = await db.reservation.find_unique(where={"id": reservation_id})
+    reservation = await db.get(Reservation, reservation_id)
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -579,31 +547,21 @@ async def update_reservation_status(
         )
     
     try:
-        updated_reservation = await db.reservation.update(
-            where={"id": reservation_id},
-            data={
-                "status": status_update.status.value,
-                "updatedAt": datetime.now()
-            },
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
-                "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
-            }
+        reservation.status = status_update.status.value
+        reservation.updatedAt = datetime.now()
+        await db.commit()
+        
+        # Re-fetch with relationships
+        result = await db.execute(
+            select(Reservation)
+            .where(Reservation.id == reservation_id)
+            .options(
+                selectinload(Reservation.user),
+                selectinload(Reservation.table),
+                selectinload(Reservation.restaurant)
+            )
         )
+        updated_reservation = result.scalar_one()
         
         return ReservationResponse.model_validate(updated_reservation)
         
@@ -619,12 +577,12 @@ async def update_reservation(
     reservation_id: int,
     reservation_update: ReservationUpdate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update reservation details (Customer or Staff)."""
     
     # Check if reservation exists
-    reservation = await db.reservation.find_unique(where={"id": reservation_id})
+    reservation = await db.get(Reservation, reservation_id)
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -658,12 +616,13 @@ async def update_reservation(
     update_data = {}
     if reservation_update.tableId is not None:
         # Validate new table
-        table = await db.table.find_unique(
-            where={
-                "id": reservation_update.tableId,
-                "restaurantId": reservation.restaurantId
-            }
+        result = await db.execute(
+            select(Table).where(
+                Table.id == reservation_update.tableId,
+                Table.restaurantId == reservation.restaurantId
+            )
         )
+        table = result.scalar_one_or_none()
         if not table or not table.isActive:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -681,28 +640,21 @@ async def update_reservation(
         update_data["updatedAt"] = datetime.now()
     
     try:
-        updated_reservation = await db.reservation.update(
-            where={"id": reservation_id},
-            data=update_data,
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
-                "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
-            }
+        for key, value in update_data.items():
+            setattr(reservation, key, value)
+        await db.commit()
+        
+        # Re-fetch with relationships
+        result = await db.execute(
+            select(Reservation)
+            .where(Reservation.id == reservation_id)
+            .options(
+                selectinload(Reservation.user),
+                selectinload(Reservation.table),
+                selectinload(Reservation.restaurant)
+            )
         )
+        updated_reservation = result.scalar_one()
         
         return ReservationResponse.model_validate(updated_reservation)
         
@@ -717,12 +669,12 @@ async def update_reservation(
 async def cancel_reservation(
     reservation_id: int,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Cancel reservation (Customer or Staff)."""
     
     # Check if reservation exists
-    reservation = await db.reservation.find_unique(where={"id": reservation_id})
+    reservation = await db.get(Reservation, reservation_id)
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -753,13 +705,9 @@ async def cancel_reservation(
         )
     
     try:
-        await db.reservation.update(
-            where={"id": reservation_id},
-            data={
-                "status": ReservationStatus.CANCELLED.value,
-                "updatedAt": datetime.now()
-            }
-        )
+        reservation.status = ReservationStatus.CANCELLED.value
+        reservation.updatedAt = datetime.now()
+        await db.commit()
         
         return {"message": "Reservation cancelled successfully"}
         

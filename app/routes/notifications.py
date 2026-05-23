@@ -1,10 +1,13 @@
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_user
 from app.models.notification import NotificationResponse
+from app.models.sqlalchemy_models import User, Notification
 from app.utils.logging import logger
 
 
@@ -12,7 +15,7 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
 async def create_restaurant_event_notifications(
-    db: "Prisma",
+    db: AsyncSession,
     restaurant_id: int,
     notification_type: str,
     title: str,
@@ -22,26 +25,30 @@ async def create_restaurant_event_notifications(
     """Create manager/admin notifications for a restaurant-scoped event."""
 
     try:
-        recipients = await db.user.find_many(
-            where={
-                "isActive": True,
-                "OR": [
-                    {"role": "ADMIN"},
-                    {"role": "MANAGER", "restaurantId": restaurant_id},
-                ],
-            }
+        result = await db.execute(
+            select(User).where(
+                and_(
+                    User.isActive == True,
+                    or_(
+                        User.role == "ADMIN",
+                        and_(User.role == "MANAGER", User.restaurantId == restaurant_id)
+                    )
+                )
+            )
         )
+        recipients = result.scalars().all()
 
         for recipient in recipients:
-            await db.notification.create(
-                data={
-                    "userId": recipient.id,
-                    "type": notification_type,
-                    "title": title,
-                    "body": body,
-                    "metadata": metadata,
-                }
+            notification = Notification(
+                userId=recipient.id,
+                type=notification_type,
+                title=title,
+                body=body,
+                _metadata=metadata,
             )
+            db.add(notification)
+
+        await db.commit()
     except Exception as exc:
         logger.error("Failed to create notifications for restaurant {}: {}", restaurant_id, exc)
 
@@ -50,61 +57,66 @@ async def create_restaurant_event_notifications(
 async def get_notifications(
     unreadOnly: bool = Query(False),
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get notifications for the current user."""
 
-    where_clause = {"userId": current_user.id}
+    stmt = select(Notification).where(Notification.userId == current_user.id)
     if unreadOnly:
-        where_clause["isRead"] = False
+        stmt = stmt.where(Notification.isRead == False)
+    stmt = stmt.order_by(Notification.createdAt.desc())
 
-    notifications = await db.notification.find_many(
-        where=where_clause,
-        order={"createdAt": "desc"},
-    )
+    result = await db.execute(stmt)
+    notifications = result.scalars().all()
 
-    return [NotificationResponse.model_validate(notification) for notification in notifications]
+    return [NotificationResponse.model_validate(n) for n in notifications]
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationResponse)
 async def mark_notification_as_read(
     notification_id: int,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Mark a single notification as read."""
 
-    notification = await db.notification.find_unique(where={"id": notification_id})
+    result = await db.execute(
+        select(Notification).where(Notification.id == notification_id)
+    )
+    notification = result.scalar_one_or_none()
     if not notification or notification.userId != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found",
         )
 
-    updated_notification = await db.notification.update(
-        where={"id": notification_id},
-        data={"isRead": True},
-    )
+    notification.isRead = True
+    await db.commit()
+    await db.refresh(notification)
 
-    return NotificationResponse.model_validate(updated_notification)
+    return NotificationResponse.model_validate(notification)
 
 
 @router.post("/read-all")
 async def mark_all_notifications_as_read(
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Mark all notifications for the current user as read."""
 
-    unread_count = await db.notification.count(
-        where={"userId": current_user.id, "isRead": False}
+    result = await db.execute(
+        select(Notification).where(
+            Notification.userId == current_user.id,
+            Notification.isRead == False,
+        )
     )
+    unread = result.scalars().all()
+    unread_count = len(unread)
 
     if unread_count:
-        await db.notification.update_many(
-            where={"userId": current_user.id, "isRead": False},
-            data={"isRead": True},
-        )
+        for n in unread:
+            n.isRead = True
+        await db.commit()
 
     return {
         "message": "Notifications marked as read",

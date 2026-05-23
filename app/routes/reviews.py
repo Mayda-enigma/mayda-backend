@@ -9,6 +9,13 @@ from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
+from app.models.sqlalchemy_models import (
+    Review, Restaurant, User, Dish, Order, OrderItem,
+    Menu, MenuCategory, OrderStatus
+)
 
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
@@ -23,70 +30,51 @@ async def get_restaurant_reviews(
     limit: int = Query(20, ge=1, le=100),
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
     verified_only: bool = Query(False),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get reviews for a restaurant (Public endpoint)."""
-    
-    # Validate restaurant exists
-    restaurant = await db.restaurant.find_unique(
-        where={"id": restaurant_id}
-    )
-    
+
+    restaurant = await db.get(Restaurant, restaurant_id)
+
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found or inactive"
         )
-    
-    # Build where clause
-    where_clause = {"restaurantId": restaurant_id}
+
+    where_clause = [Review.restaurantId == restaurant_id]
     if rating_filter:
-        where_clause["rating"] = rating_filter
+        where_clause.append(Review.rating == rating_filter)
     if verified_only:
-        where_clause["isVerified"] = True
-    
-    # Get reviews with relations
-    reviews = await db.review.find_many(
-        where=where_clause,
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True
-                }
-            },
-            "dish": {
-                "select": {
-                    "name": True
-                }
-            }
-        },
-        skip=skip,
-        take=limit,
-        order={"createdAt": "desc"}
-    )
-    
-    # Calculate stats
-    all_reviews = await db.review.find_many(
-        where={"restaurantId": restaurant_id}
-    )
-    
+        where_clause.append(Review.isVerified == True)
+
+    reviews = (await db.execute(
+        select(Review)
+        .where(and_(*where_clause))
+        .options(selectinload(Review.user), selectinload(Review.dish))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Review.createdAt.desc())
+    )).scalars().all()
+
+    all_reviews = (await db.execute(
+        select(Review).where(Review.restaurantId == restaurant_id)
+    )).scalars().all()
+
     total_reviews = len(all_reviews)
     if total_reviews > 0:
         average_rating = sum(review.rating for review in all_reviews) / total_reviews
-        
-        # Rating distribution
+
         rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         for review in all_reviews:
             rating_distribution[review.rating] += 1
-        
+
         verified_reviews = len([r for r in all_reviews if r.isVerified])
     else:
         average_rating = 0
         rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         verified_reviews = 0
-    
-    # Format review list
+
     review_list = []
     for review in reviews:
         review_dict = review.__dict__.copy()
@@ -94,10 +82,9 @@ async def get_restaurant_reviews(
         review_dict["restaurantName"] = restaurant.name
         review_dict["dishName"] = review.dish.name if review.dish else None
         review_list.append(ReviewListResponse.model_validate(review_dict))
-    
-    # Latest reviews for stats (top 5)
+
     latest_reviews = review_list[:5]
-    
+
     stats = ReviewStats(
         totalReviews=total_reviews,
         averageRating=round(average_rating, 2),
@@ -105,7 +92,7 @@ async def get_restaurant_reviews(
         verifiedReviews=verified_reviews,
         latestReviews=latest_reviews
     )
-    
+
     return RestaurantReviewsResponse(
         restaurant=restaurant.__dict__,
         stats=stats,
@@ -120,80 +107,59 @@ async def get_dish_reviews(
     limit: int = Query(20, ge=1, le=100),
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
     verified_only: bool = Query(False),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get reviews for a specific dish (Public endpoint)."""
-    
-    # Validate dish exists
-    dish = await db.dish.find_unique(
-        where={"id": dish_id},
-        include={
-            "category": {
-                "include": {
-                    "menu": {
-                        "include": {
-                            "restaurant": {
-                                "select": {
-                                    "id": True,
-                                    "name": True
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    )
-    
+
+    dish = (await db.execute(
+        select(Dish)
+        .where(Dish.id == dish_id)
+        .options(
+            selectinload(Dish.category)
+            .selectinload(MenuCategory.menu)
+            .selectinload(Menu.restaurant)
+        )
+    )).scalar_one_or_none()
+
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
-    # Build where clause
-    where_clause = {"dishId": dish_id}
+
+    where_clause = [Review.dishId == dish_id]
     if rating_filter:
-        where_clause["rating"] = rating_filter
+        where_clause.append(Review.rating == rating_filter)
     if verified_only:
-        where_clause["isVerified"] = True
-    
-    # Get reviews
-    reviews = await db.review.find_many(
-        where=where_clause,
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True
-                }
-            }
-        },
-        skip=skip,
-        take=limit,
-        order={"createdAt": "desc"}
-    )
-    
-    # Calculate stats
-    all_reviews = await db.review.find_many(
-        where={"dishId": dish_id}
-    )
-    
+        where_clause.append(Review.isVerified == True)
+
+    reviews = (await db.execute(
+        select(Review)
+        .where(and_(*where_clause))
+        .options(selectinload(Review.user))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Review.createdAt.desc())
+    )).scalars().all()
+
+    all_reviews = (await db.execute(
+        select(Review).where(Review.dishId == dish_id)
+    )).scalars().all()
+
     total_reviews = len(all_reviews)
     if total_reviews > 0:
         average_rating = sum(review.rating for review in all_reviews) / total_reviews
-        
+
         rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         for review in all_reviews:
             rating_distribution[review.rating] += 1
-        
+
         verified_reviews = len([r for r in all_reviews if r.isVerified])
     else:
         average_rating = 0
         rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         verified_reviews = 0
-    
-    # Format review list
+
     review_list = []
     for review in reviews:
         review_dict = review.__dict__.copy()
@@ -201,9 +167,9 @@ async def get_dish_reviews(
         review_dict["restaurantName"] = dish.category.menu.restaurant.name
         review_dict["dishName"] = dish.name
         review_list.append(ReviewListResponse.model_validate(review_dict))
-    
+
     latest_reviews = review_list[:5]
-    
+
     stats = ReviewStats(
         totalReviews=total_reviews,
         averageRating=round(average_rating, 2),
@@ -211,7 +177,7 @@ async def get_dish_reviews(
         verifiedReviews=verified_reviews,
         latestReviews=latest_reviews
     )
-    
+
     return DishReviewsResponse(
         dish={"id": dish.id, "name": dish.name, "price": dish.price},
         restaurant=dish.category.menu.restaurant.__dict__,
@@ -226,52 +192,50 @@ async def get_dish_reviews(
 async def create_review(
     review_data: ReviewCreate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create review for authenticated user."""
-    
-    # Validate restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": review_data.restaurantId})
+
+    restaurant = await db.get(Restaurant, review_data.restaurantId)
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found or inactive"
         )
-    
-    # Validate dish if provided
+
     if review_data.dishId:
-        dish = await db.dish.find_unique(
-            where={"id": review_data.dishId},
-            include={
-                "category": {
-                    "include": {
-                        "menu": True
-                    }
-                }
-            }
-        )
+        dish = (await db.execute(
+            select(Dish)
+            .where(Dish.id == review_data.dishId)
+            .options(
+                selectinload(Dish.category).selectinload(MenuCategory.menu)
+            )
+        )).scalar_one_or_none()
         if not dish:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Dish not found"
             )
-        
-        # Ensure dish belongs to the restaurant
+
         if dish.category.menu.restaurantId != review_data.restaurantId:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Dish does not belong to the specified restaurant"
             )
-    
-    # Check if user already reviewed this restaurant/dish
-    existing_review = await db.review.find_first(
-        where={
-            "userId": current_user.id,
-            "restaurantId": review_data.restaurantId,
-            "dishId": review_data.dishId
-        }
-    )
-    
+
+    existing_where = [
+        Review.userId == current_user.id,
+        Review.restaurantId == review_data.restaurantId,
+    ]
+    if review_data.dishId:
+        existing_where.append(Review.dishId == review_data.dishId)
+    else:
+        existing_where.append(Review.dishId == None)
+
+    existing_review = (await db.execute(
+        select(Review).where(and_(*existing_where))
+    )).scalar_one_or_none()
+
     if existing_review:
         detail = "You have already reviewed this "
         detail += "dish" if review_data.dishId else "restaurant"
@@ -280,47 +244,49 @@ async def create_review(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail
         )
-    
-    # Check if user has actually ordered from this restaurant (for verification)
-    has_ordered = await db.order.find_first(
-        where={
-            "userId": current_user.id,
-            "restaurantId": review_data.restaurantId,
-            "status": {"in": ["COMPLETED"]}
-        }
-    )
-    
-    # If reviewing a specific dish, check if they ordered that dish
+
+    has_ordered = (await db.execute(
+        select(Order).where(
+            and_(
+                Order.userId == current_user.id,
+                Order.restaurantId == review_data.restaurantId,
+                Order.status == OrderStatus.COMPLETED
+            )
+        )
+    )).scalar_one_or_none()
+
     is_verified = False
     if has_ordered:
         if review_data.dishId:
-            # Check if they ordered this specific dish
-            ordered_dish = await db.orderitem.find_first(
-                where={
-                    "dishId": review_data.dishId,
-                    "order": {
-                        "userId": current_user.id,
-                        "restaurantId": review_data.restaurantId,
-                        "status": "COMPLETED"
-                    }
-                }
-            )
+            ordered_dish = (await db.execute(
+                select(OrderItem)
+                .where(
+                    and_(
+                        OrderItem.dishId == review_data.dishId,
+                        OrderItem.order.has(
+                            and_(
+                                Order.userId == current_user.id,
+                                Order.restaurantId == review_data.restaurantId,
+                                Order.status == OrderStatus.COMPLETED
+                            )
+                        )
+                    )
+                )
+            )).scalar_one_or_none()
             is_verified = bool(ordered_dish)
         else:
-            # Restaurant review - just need to have ordered from restaurant
             is_verified = True
-    
-    # Simple sentiment analysis (basic implementation)
+
     sentiment = None
     sentiment_score = None
     if review_data.comment:
         comment_lower = review_data.comment.lower()
         positive_words = ["good", "great", "excellent", "amazing", "love", "delicious", "fantastic", "wonderful"]
         negative_words = ["bad", "terrible", "awful", "hate", "disgusting", "horrible", "worst"]
-        
+
         positive_count = sum(1 for word in positive_words if word in comment_lower)
         negative_count = sum(1 for word in negative_words if word in comment_lower)
-        
+
         if positive_count > negative_count:
             sentiment = "positive"
             sentiment_score = min(0.8, 0.5 + (positive_count * 0.1))
@@ -330,47 +296,34 @@ async def create_review(
         else:
             sentiment = "neutral"
             sentiment_score = 0.5
-    
+
     try:
-        review = await db.review.create(
-            data={
-                "userId": current_user.id,
-                "restaurantId": review_data.restaurantId,
-                "dishId": review_data.dishId,
-                "rating": review_data.rating,
-                "comment": review_data.comment,
-                "sentiment": sentiment,
-                "sentimentScore": sentiment_score,
-                "isVerified": is_verified
-            }
+        review = Review(
+            userId=current_user.id,
+            restaurantId=review_data.restaurantId,
+            dishId=review_data.dishId,
+            rating=review_data.rating,
+            comment=review_data.comment,
+            sentiment=sentiment,
+            sentimentScore=sentiment_score,
+            isVerified=is_verified
         )
-        
-        # Fetch complete review with relations
-        complete_review = await db.review.find_unique(
-            where={"id": review.id},
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True
-                    }
-                },
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                },
-                "dish": {
-                    "select": {
-                        "name": True,
-                        "price": True
-                    }
-                }
-            }
-        )
-        
+        db.add(review)
+        await db.commit()
+        await db.refresh(review)
+
+        complete_review = (await db.execute(
+            select(Review)
+            .where(Review.id == review.id)
+            .options(
+                selectinload(Review.user),
+                selectinload(Review.restaurant),
+                selectinload(Review.dish),
+            )
+        )).scalar_one_or_none()
+
         return ReviewResponse.model_validate(complete_review)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -383,30 +336,19 @@ async def get_my_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get current user's reviews."""
-    
-    reviews = await db.review.find_many(
-        where={"userId": current_user.id},
-        include={
-            "restaurant": {
-                "select": {
-                    "name": True
-                }
-            },
-            "dish": {
-                "select": {
-                    "name": True
-                }
-            }
-        },
-        skip=skip,
-        take=limit,
-        order={"createdAt": "desc"}
-    )
-    
-    # Format response
+
+    reviews = (await db.execute(
+        select(Review)
+        .where(Review.userId == current_user.id)
+        .options(selectinload(Review.restaurant), selectinload(Review.dish))
+        .offset(skip)
+        .limit(limit)
+        .order_by(Review.createdAt.desc())
+    )).scalars().all()
+
     review_list = []
     for review in reviews:
         review_dict = review.__dict__.copy()
@@ -414,7 +356,7 @@ async def get_my_reviews(
         review_dict["restaurantName"] = review.restaurant.name
         review_dict["dishName"] = review.dish.name if review.dish else None
         review_list.append(ReviewListResponse.model_validate(review_dict))
-    
+
     return review_list
 
 
@@ -422,58 +364,41 @@ async def get_my_reviews(
 async def get_review(
     review_id: int,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get review by ID. Users can only see their own reviews, staff can see restaurant reviews."""
-    
-    review = await db.review.find_unique(
-        where={"id": review_id},
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True
-                }
-            },
-            "restaurant": {
-                "select": {
-                    "name": True
-                }
-            },
-            "dish": {
-                "select": {
-                    "name": True,
-                    "price": True
-                }
-            }
-        }
-    )
-    
+
+    review = (await db.execute(
+        select(Review)
+        .where(Review.id == review_id)
+        .options(
+            selectinload(Review.user),
+            selectinload(Review.restaurant),
+            selectinload(Review.dish),
+        )
+    )).scalar_one_or_none()
+
     if not review:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found"
         )
-    
-    # Check permissions
+
     if current_user.role == "ADMIN":
-        # Admin can see all reviews
         pass
     elif current_user.role in ["WAITER", "CHEF", "MANAGER"]:
-        # Staff can see reviews for their restaurant
         if current_user.restaurantId != review.restaurantId:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view reviews for your restaurant"
             )
     else:
-        # Regular users can only see their own reviews
         if review.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view your own reviews"
             )
-    
+
     return ReviewResponse.model_validate(review)
 
 
@@ -482,41 +407,37 @@ async def update_review(
     review_id: int,
     review_update: ReviewUpdate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update review (Customer only - their own reviews)."""
-    
-    # Check if review exists
-    review = await db.review.find_unique(where={"id": review_id})
+
+    review = await db.get(Review, review_id)
     if not review:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found"
         )
-    
-    # Only the review author can update it
+
     if review.userId != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own reviews"
         )
-    
-    # Prepare update data
+
     update_data = {}
     if review_update.rating is not None:
         update_data["rating"] = review_update.rating
-    
+
     if review_update.comment is not None:
         update_data["comment"] = review_update.comment
-        
-        # Re-analyze sentiment if comment is updated
+
         comment_lower = review_update.comment.lower()
         positive_words = ["good", "great", "excellent", "amazing", "love", "delicious", "fantastic", "wonderful"]
         negative_words = ["bad", "terrible", "awful", "hate", "disgusting", "horrible", "worst"]
-        
+
         positive_count = sum(1 for word in positive_words if word in comment_lower)
         negative_count = sum(1 for word in negative_words if word in comment_lower)
-        
+
         if positive_count > negative_count:
             update_data["sentiment"] = "positive"
             update_data["sentimentScore"] = min(0.8, 0.5 + (positive_count * 0.1))
@@ -526,83 +447,62 @@ async def update_review(
         else:
             update_data["sentiment"] = "neutral"
             update_data["sentimentScore"] = 0.5
-    
+
     if update_data:
         update_data["updatedAt"] = datetime.now()
-    
-    try:
-        updated_review = await db.review.update(
-            where={"id": review_id},
-            data=update_data,
-            include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True
-                    }
-                },
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                },
-                "dish": {
-                    "select": {
-                        "name": True,
-                        "price": True
-                    }
-                }
-            }
+        for key, value in update_data.items():
+            setattr(review, key, value)
+        await db.commit()
+        await db.refresh(review)
+
+    result = (await db.execute(
+        select(Review)
+        .where(Review.id == review_id)
+        .options(
+            selectinload(Review.user),
+            selectinload(Review.restaurant),
+            selectinload(Review.dish),
         )
-        
-        return ReviewResponse.model_validate(updated_review)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating review: {str(e)}"
-        )
+    )).scalar_one_or_none()
+
+    return ReviewResponse.model_validate(result)
 
 
 @router.delete("/{review_id}")
 async def delete_review(
     review_id: int,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete review (Customer or Staff)."""
-    
-    # Check if review exists
-    review = await db.review.find_unique(where={"id": review_id})
+
+    review = await db.get(Review, review_id)
     if not review:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Review not found"
         )
-    
-    # Check permissions
+
     if current_user.role == "ADMIN":
-        # Admin can delete any review
         pass
     elif current_user.role in ["MANAGER"]:
-        # Managers can delete reviews for their restaurant
         if current_user.restaurantId != review.restaurantId:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only delete reviews for your restaurant"
             )
     else:
-        # Regular users can only delete their own reviews
         if review.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only delete your own reviews"
             )
-    
+
     try:
-        await db.review.delete(where={"id": review_id})
+        await db.delete(review)
+        await db.commit()
         return {"message": "Review deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -620,52 +520,35 @@ async def get_restaurant_reviews_management(
     rating_filter: Optional[int] = Query(None, ge=1, le=5),
     sentiment_filter: Optional[str] = Query(None),
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get restaurant reviews for management (Staff only)."""
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only view reviews for your own restaurant"
         )
-    
-    # Build where clause
-    where_clause = {"restaurantId": restaurant_id}
+
+    where_clause = [Review.restaurantId == restaurant_id]
     if rating_filter:
-        where_clause["rating"] = rating_filter
+        where_clause.append(Review.rating == rating_filter)
     if sentiment_filter:
-        where_clause["sentiment"] = sentiment_filter
-    
-    reviews = await db.review.find_many(
-        where=where_clause,
-        include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True,
-                    "email": True
-                }
-            },
-            "restaurant": {
-                "select": {
-                    "name": True
-                }
-            },
-            "dish": {
-                "select": {
-                    "name": True
-                }
-            }
-        },
-        skip=skip,
-        take=limit,
-        order={"createdAt": "desc"}
-    )
-    
-    # Format response with more customer details for staff
+        where_clause.append(Review.sentiment == sentiment_filter)
+
+    reviews = (await db.execute(
+        select(Review)
+        .where(and_(*where_clause))
+        .options(
+            selectinload(Review.user),
+            selectinload(Review.restaurant),
+            selectinload(Review.dish),
+        )
+        .offset(skip)
+        .limit(limit)
+        .order_by(Review.createdAt.desc())
+    )).scalars().all()
+
     review_list = []
     for review in reviews:
         review_dict = review.__dict__.copy()
@@ -673,5 +556,5 @@ async def get_restaurant_reviews_management(
         review_dict["restaurantName"] = review.restaurant.name
         review_dict["dishName"] = review.dish.name if review.dish else None
         review_list.append(ReviewListResponse.model_validate(review_dict))
-    
+
     return review_list

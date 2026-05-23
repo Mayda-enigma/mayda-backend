@@ -5,7 +5,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # JWT Settings
-    SECRET_KEY: str = "your-secret-key-change-this-in-production"
+    SECRET_KEY: str  # no default — must be set via env
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
+    @property
+    def async_database_url(self) -> str:
+        """Return DATABASE_URL with async driver for SQLAlchemy."""
+        url = self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if "?" in url:
+            url = url.split("?")[0]
+        return url
+
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = []
     BACKEND_CORS_ORIGIN_REGEX: str = (
@@ -32,11 +40,11 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # AI Services
-    RECOMMENDATION_SERVICE_URL: str = "http://recommendation:8101"
-    SEARCH_SERVICE_URL: str = "http://search-llm:8102"
-    INVENTORY_SERVICE_URL: str = "http://inventory:8103"
-    VOICE_SERVICE_URL: str = "http://voice-chef:8104"
-    ANOMALY_SERVICE_URL: str = "http://anomaly:8105"
+    RECOMMENDATION_SERVICE_URL: str = "http://mayda-ai:8101"
+    SEARCH_SERVICE_URL: str = "http://mayda-ai:8101"
+    INVENTORY_SERVICE_URL: str = "http://mayda-ai:8101"
+    VOICE_SERVICE_URL: str = "http://mayda-ai:8101"
+    ANOMALY_SERVICE_URL: str = "http://mayda-ai:8101"
     SERVICE_TOKEN: str = ""
 
     @model_validator(mode="after")

@@ -20,9 +20,11 @@ from pathlib import Path
 # Add the app directory to the Python path
 sys.path.append(str(Path(__file__).parent))
 
+from sqlalchemy import select, or_
+
 from app.core.database import connect_db, disconnect_db, get_db
 from app.auth.jwt import get_password_hash
-from app.models.user import UserRole
+from app.models.sqlalchemy_models import User, UserRole
 from app.utils.logging import logger
 
 
@@ -34,14 +36,10 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
         db = get_db()
 
         # Check if user already exists
-        existing_user = await db.user.find_first(
-            where={
-                "OR": [
-                    {"email": email},
-                    {"phone": phone}
-                ]
-            }
+        result = await db.execute(
+            select(User).where(or_(User.email == email, User.phone == phone))
         )
+        existing_user = result.scalar_one_or_none()
 
         if existing_user:
             if existing_user.email == email:
@@ -55,17 +53,18 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
         hashed_password = get_password_hash(password)
 
         # Create the admin user
-        admin_user = await db.user.create(
-            data={
-                "email": email,
-                "phone": phone,
-                "firstName": first_name,
-                "lastName": last_name,
-                "password": hashed_password,
-                "role": UserRole.ADMIN.value,
-                "isActive": True
-            }
+        admin_user = User(
+            email=email,
+            phone=phone,
+            firstName=first_name,
+            lastName=last_name,
+            password=hashed_password,
+            role=UserRole.ADMIN,
+            isActive=True,
         )
+        db.add(admin_user)
+        await db.commit()
+        await db.refresh(admin_user)
 
         logger.info("Admin user created successfully!")
         logger.info("Email: {}", admin_user.email)
