@@ -20,12 +20,15 @@ model User {
   specialinfo Json?
   restaurantId Int?
   restaurant   Restaurant? @relation("RestaurantStaff", fields: [restaurantId], references: [id])
+  tableSessions TableSession[] @relation("TableWaiterSessions")
   orders       Order[]
   reviews      Review[]
   loyaltyCard  LoyaltyCard?
   address      Address? 
   reservations Reservation[]
+  notifications Notification[]
   refreshTokens RefreshToken[]
+  pushTokens   PushToken[]
   otpCodes     OtpCode[]
   @@map("users")
 }
@@ -41,6 +44,18 @@ model RefreshToken {
   
   @@map("refresh_tokens")
 }
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@map("push_tokens")
+}
+
 model Address {
   id           Int  @id @default(autoincrement())
   userId       Int? @unique 
@@ -146,14 +161,36 @@ model Table {
   number       String     
   capacity     Int
   isActive     Boolean    @default(true)
+  status       TableStatus @default(AVAILABLE)
   qrCode       String?    
   nfcTag       String?    
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   reservations Reservation[]
   orders       Order[]
+  sessions     TableSession[]
   @@unique([restaurantId, number])
   @@map("tables")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+}
+
+model TableSession {
+  id        Int      @id @default(autoincrement())
+  tableId    Int
+  table      Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  waiterId   Int
+  waiter     User     @relation("TableWaiterSessions", fields: [waiterId], references: [id], onDelete: Cascade)
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  isActive   Boolean  @default(true)
+
+  @@index([tableId, isActive])
+  @@index([waiterId, isActive])
+  @@map("table_sessions")
 }
 
 model Reservation {
@@ -372,6 +409,30 @@ model Payments {
   createdAt         DateTime @default(now())
   
   @@map("payments")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+model PlatformSettings {
+  id                    Int      @id @default(1)
+  currency              String   @default("USD")
+  timezone              String   @default("UTC")
+  defaultOperatingHours Json
+  featureFlags          Json     @default("{}")
+  updatedAt             DateTime @updatedAt
+
+  @@map("platform_settings")
 }
 
 model OtpCode {
