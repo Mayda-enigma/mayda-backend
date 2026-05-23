@@ -73,6 +73,29 @@ prisma migrate dev --name <name>
 prisma migrate deploy
 ```
 
+## First-time Setup
+
+After migrations are applied and the server is running, create the initial admin user with the CLI:
+
+```bash
+python -m app.cli create-admin \
+  --email admin@caravane.com \
+  --phone 1234567890 \
+  --password <secure-password>
+```
+
+Options:
+
+| Flag | Required | Default | Description |
+|---|---|---|---|
+| `--email` | Yes | — | Admin email address |
+| `--phone` | Yes | — | Admin phone number |
+| `--password` | Yes | — | Password (min 6 chars) |
+| `--first-name` | No | `Admin` | First name |
+| `--last-name` | No | `User` | Last name |
+
+The command refuses to run if a user with the same email or phone already exists.
+No admin is created automatically on startup — creation is always explicit.
 ## Role-Based Access Control (RBAC)
 
 RBAC is enforced exclusively through **FastAPI `Depends` functions** declared in `app/middleware/roles.py`. Use these dependencies in route signatures — never implement role checks inline or via decorators.
