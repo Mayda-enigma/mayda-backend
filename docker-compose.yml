@@ -33,13 +33,13 @@ services:
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - REFRESH_TOKEN_EXPIRE_DAYS=7
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
-      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
-      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
-      - GUIDINI_APP_KEY=${GUIDINI_APP_KEY}
-      - GUIDINI_API_KEY=${GUIDINI_API_KEY}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-dev-twilio-token}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER:-+1234567890}
+      - GUIDINI_APP_KEY=${GUIDINI_APP_KEY:-dev-guidini-app-key}
+      - GUIDINI_API_KEY=${GUIDINI_API_KEY:-dev-guidini-api-key}
       - SERVICE_TOKEN=${SERVICE_TOKEN:-dev-service-token-change-in-production}
-      - ENVIRONMENT=production
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     depends_on:
       db:
         condition: service_healthy
@@ -49,29 +49,13 @@ services:
       - api_logs:/app/logs
     command: >
       sh -c "
-        echo 'Waiting for database...' &&
-        sleep 10 &&
-        echo 'Running database migrations...' &&
-        prisma migrate deploy &&
-        echo 'Starting API server...' &&
+        echo '🔄 Running database migrations...' &&
+        python -m prisma migrate deploy &&
+        echo '🌱 Seeding database...' &&
+        python scripts/seed_db.py &&
+        echo '🚀 Starting API server...' &&
         uvicorn main:app --host 0.0.0.0 --port 8001
       "
-
-  # Nginx Reverse Proxy (Optional)
-  nginx:
-    image: nginx:alpine
-    container_name: restaurant_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - api
-    networks:
-      - restaurant_network
 
 volumes:
   postgres_data:
