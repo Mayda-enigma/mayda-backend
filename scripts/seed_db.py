@@ -1,17 +1,34 @@
 import asyncio
 import json
-from datetime import datetime, timedelta
 import random
+from datetime import datetime, timedelta
 
-from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.models.sqlalchemy_models import (
-    User, UserRole, Restaurant, Address, Table, Inventory, Menu, MenuCategory,
-    Dish, DishInventoryLink, LoyaltyCard, Promotion, Reservation, Order,
-    OrderItem, Review, LoyaltyTransaction, OrderType, OrderStatus, PaymentStatus,
-    ReservationStatus
+    Address,
+    Dish,
+    DishInventoryLink,
+    Inventory,
+    LoyaltyCard,
+    LoyaltyTransaction,
+    Menu,
+    MenuCategory,
+    Order,
+    OrderItem,
+    OrderStatus,
+    OrderType,
+    PaymentStatus,
+    Promotion,
+    Reservation,
+    ReservationStatus,
+    Restaurant,
+    Review,
+    Table,
+    User,
+    UserRole,
 )
 
 
@@ -60,33 +77,73 @@ async def main():
         else:
             restaurants_data = [
                 {
-                    'name': 'Caravane Downtown',
-                    'phone': '0123456789',
-                    'email': 'downtown@caravane.com',
-                    'operatingHours': json.dumps({'monday': '08:00-23:00', 'tuesday': '08:00-23:00', 'wednesday': '08:00-23:00', 'thursday': '08:00-23:00', 'friday': '08:00-23:00', 'saturday': '08:00-23:00', 'sunday': '08:00-23:00'}),
-                    'description': 'Trendy downtown location with modern international cuisine and craft cocktails.'
+                    "name": "Caravane Downtown",
+                    "phone": "0123456789",
+                    "email": "downtown@caravane.com",
+                    "operatingHours": json.dumps(
+                        {
+                            "monday": "08:00-23:00",
+                            "tuesday": "08:00-23:00",
+                            "wednesday": "08:00-23:00",
+                            "thursday": "08:00-23:00",
+                            "friday": "08:00-23:00",
+                            "saturday": "08:00-23:00",
+                            "sunday": "08:00-23:00",
+                        }
+                    ),
+                    "description": "Trendy downtown location with modern international cuisine and craft cocktails.",
                 },
                 {
-                    'name': 'Caravane Beachside',
-                    'phone': '0987654321',
-                    'email': 'beachside@caravane.com',
-                    'operatingHours': json.dumps({'monday': '07:00-24:00', 'tuesday': '07:00-24:00', 'wednesday': '07:00-24:00', 'thursday': '07:00-24:00', 'friday': '07:00-24:00', 'saturday': '07:00-24:00', 'sunday': '07:00-24:00'}),
-                    'description': 'Oceanfront dining with fresh seafood and Mediterranean flavors.'
+                    "name": "Caravane Beachside",
+                    "phone": "0987654321",
+                    "email": "beachside@caravane.com",
+                    "operatingHours": json.dumps(
+                        {
+                            "monday": "07:00-24:00",
+                            "tuesday": "07:00-24:00",
+                            "wednesday": "07:00-24:00",
+                            "thursday": "07:00-24:00",
+                            "friday": "07:00-24:00",
+                            "saturday": "07:00-24:00",
+                            "sunday": "07:00-24:00",
+                        }
+                    ),
+                    "description": "Oceanfront dining with fresh seafood and Mediterranean flavors.",
                 },
                 {
-                    'name': 'Caravane Gardens',
-                    'phone': '0555123456',
-                    'email': 'gardens@caravane.com',
-                    'operatingHours': json.dumps({'monday': '09:00-22:00', 'tuesday': '09:00-22:00', 'wednesday': '09:00-22:00', 'thursday': '09:00-22:00', 'friday': '09:00-22:00', 'saturday': '09:00-22:00', 'sunday': '09:00-22:00'}),
-                    'description': 'Garden-to-table restaurant focusing on organic, locally sourced ingredients.'
+                    "name": "Caravane Gardens",
+                    "phone": "0555123456",
+                    "email": "gardens@caravane.com",
+                    "operatingHours": json.dumps(
+                        {
+                            "monday": "09:00-22:00",
+                            "tuesday": "09:00-22:00",
+                            "wednesday": "09:00-22:00",
+                            "thursday": "09:00-22:00",
+                            "friday": "09:00-22:00",
+                            "saturday": "09:00-22:00",
+                            "sunday": "09:00-22:00",
+                        }
+                    ),
+                    "description": "Garden-to-table restaurant focusing on organic, locally sourced ingredients.",
                 },
                 {
-                    'name': 'Caravane Rooftop',
-                    'phone': '0444567890',
-                    'email': 'rooftop@caravane.com',
-                    'operatingHours': json.dumps({'monday': '17:00-02:00', 'tuesday': '17:00-02:00', 'wednesday': '17:00-02:00', 'thursday': '17:00-02:00', 'friday': '17:00-02:00', 'saturday': '17:00-02:00', 'sunday': '17:00-02:00'}),
-                    'description': 'Upscale rooftop dining with panoramic city views and innovative cuisine.'
-                }
+                    "name": "Caravane Rooftop",
+                    "phone": "0444567890",
+                    "email": "rooftop@caravane.com",
+                    "operatingHours": json.dumps(
+                        {
+                            "monday": "17:00-02:00",
+                            "tuesday": "17:00-02:00",
+                            "wednesday": "17:00-02:00",
+                            "thursday": "17:00-02:00",
+                            "friday": "17:00-02:00",
+                            "saturday": "17:00-02:00",
+                            "sunday": "17:00-02:00",
+                        }
+                    ),
+                    "description": "Upscale rooftop dining with panoramic city views and innovative cuisine.",
+                },
             ]
 
             restaurants = []
@@ -102,17 +159,17 @@ async def main():
         users = []
 
         # Check if admin already exists, if not create one
-        result = await db.execute(select(User).where(User.email == 'admin@caravane.com'))
+        result = await db.execute(select(User).where(User.email == "admin@caravane.com"))
         admin = result.scalar_one_or_none()
         if not admin:
             admin = User(
-                email='admin@caravane.com',
+                email="admin@caravane.com",
                 phone=111111111,
-                firstName='System',
-                lastName='Administrator',
+                firstName="System",
+                lastName="Administrator",
                 role=UserRole.ADMIN,
                 isActive=True,
-                password='$2b$12$KVtnpBREulpi3vjhE9SveOyGxTADCAzYOqm/5YuFL/rZy8m/5P0M6'
+                password="$2b$12$KVtnpBREulpi3vjhE9SveOyGxTADCAzYOqm/5YuFL/rZy8m/5P0M6",
             )
             db.add(admin)
             await db.commit()
@@ -124,29 +181,54 @@ async def main():
 
         # Create Managers for each restaurant
         manager_data = [
-            {'firstName': 'John', 'lastName': 'Manager', 'email': 'john.manager@caravane.com', 'phone': 222222222},
-            {'firstName': 'Sarah', 'lastName': 'Wilson', 'email': 'sarah.wilson@caravane.com', 'phone': 222222223},
-            {'firstName': 'Mike', 'lastName': 'Johnson', 'email': 'mike.johnson@caravane.com', 'phone': 222222224},
-            {'firstName': 'Lisa', 'lastName': 'Brown', 'email': 'lisa.brown@caravane.com', 'phone': 222222225}
+            {
+                "firstName": "John",
+                "lastName": "Manager",
+                "email": "john.manager@caravane.com",
+                "phone": 222222222,
+            },
+            {
+                "firstName": "Sarah",
+                "lastName": "Wilson",
+                "email": "sarah.wilson@caravane.com",
+                "phone": 222222223,
+            },
+            {
+                "firstName": "Mike",
+                "lastName": "Johnson",
+                "email": "mike.johnson@caravane.com",
+                "phone": 222222224,
+            },
+            {
+                "firstName": "Lisa",
+                "lastName": "Brown",
+                "email": "lisa.brown@caravane.com",
+                "phone": 222222225,
+            },
         ]
 
         managers = []
         for i, manager_info in enumerate(manager_data):
-            manager = await find_or_create_user(db, manager_info['email'], {**manager_info,
-                'role': UserRole.MANAGER,
-                'isActive': True,
-                'password': '$2b$12$cQ7.1vON3C2ez9pAZ8ooHOaUnG3MtHQ5/UVZUrdKX/AGwcWIK58MW',
-                'restaurantId': restaurants[i].id
-            })
+            manager = await find_or_create_user(
+                db,
+                manager_info["email"],
+                {
+                    **manager_info,
+                    "role": UserRole.MANAGER,
+                    "isActive": True,
+                    "password": "$2b$12$cQ7.1vON3C2ez9pAZ8ooHOaUnG3MtHQ5/UVZUrdKX/AGwcWIK58MW",
+                    "restaurantId": restaurants[i].id,
+                },
+            )
             users.append(manager)
             managers.append(manager)
 
         # Create Staff (Waiters, Chefs) for each restaurant
         staff_data = [
-            {'firstName': 'Alice', 'lastName': 'Waiter', 'role': UserRole.WAITER},
-            {'firstName': 'Bob', 'lastName': 'Server', 'role': UserRole.WAITER},
-            {'firstName': 'Charlie', 'lastName': 'Chef', 'role': UserRole.CHEF},
-            {'firstName': 'Diana', 'lastName': 'Cook', 'role': UserRole.CHEF}
+            {"firstName": "Alice", "lastName": "Waiter", "role": UserRole.WAITER},
+            {"firstName": "Bob", "lastName": "Server", "role": UserRole.WAITER},
+            {"firstName": "Charlie", "lastName": "Chef", "role": UserRole.CHEF},
+            {"firstName": "Diana", "lastName": "Cook", "role": UserRole.CHEF},
         ]
 
         phone_counter = 333333330
@@ -154,51 +236,94 @@ async def main():
         for restaurant in restaurants:
             for staff_info in staff_data:
                 phone_counter += 1
-                email = f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@caravane.com"
-                staff = await find_or_create_user(db, email, {
-                    'firstName': staff_info['firstName'],
-                    'lastName': staff_info['lastName'],
-                    'email': email,
-                    'phone': phone_counter,
-                    'role': staff_info['role'],
-                    'isActive': True,
-                    'password': '$2b$12$7rOF89hoYTI/jNWv4hBhLeWfMSDE9oeRrSKSElpiZm95hRtn0Vc9y',
-                    'restaurantId': restaurant.id
-                })
+                email = (
+                    f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@caravane.com"  # noqa: E501
+                )
+                staff = await find_or_create_user(
+                    db,
+                    email,
+                    {
+                        "firstName": staff_info["firstName"],
+                        "lastName": staff_info["lastName"],
+                        "email": email,
+                        "phone": phone_counter,
+                        "role": staff_info["role"],
+                        "isActive": True,
+                        "password": "$2b$12$7rOF89hoYTI/jNWv4hBhLeWfMSDE9oeRrSKSElpiZm95hRtn0Vc9y",
+                        "restaurantId": restaurant.id,
+                    },
+                )
                 users.append(staff)
                 staff_members.append(staff)
 
         # Create Clients
         client_data = [
-            {'firstName': 'Emma', 'lastName': 'Johnson', 'email': 'emma.johnson@email.com', 'phone': 555555551},
-            {'firstName': 'James', 'lastName': 'Smith', 'email': 'james.smith@email.com', 'phone': 555555552},
-            {'firstName': 'Olivia', 'lastName': 'Brown', 'email': 'olivia.brown@email.com', 'phone': 555555553},
-            {'firstName': 'William', 'lastName': 'Davis', 'email': 'william.davis@email.com', 'phone': 555555554},
-            {'firstName': 'Sophia', 'lastName': 'Miller', 'email': 'sophia.miller@email.com', 'phone': 555555555},
-            {'firstName': 'Benjamin', 'lastName': 'Wilson', 'email': 'benjamin.wilson@email.com', 'phone': 555555556},
+            {
+                "firstName": "Emma",
+                "lastName": "Johnson",
+                "email": "emma.johnson@email.com",
+                "phone": 555555551,
+            },
+            {
+                "firstName": "James",
+                "lastName": "Smith",
+                "email": "james.smith@email.com",
+                "phone": 555555552,
+            },
+            {
+                "firstName": "Olivia",
+                "lastName": "Brown",
+                "email": "olivia.brown@email.com",
+                "phone": 555555553,
+            },
+            {
+                "firstName": "William",
+                "lastName": "Davis",
+                "email": "william.davis@email.com",
+                "phone": 555555554,
+            },
+            {
+                "firstName": "Sophia",
+                "lastName": "Miller",
+                "email": "sophia.miller@email.com",
+                "phone": 555555555,
+            },
+            {
+                "firstName": "Benjamin",
+                "lastName": "Wilson",
+                "email": "benjamin.wilson@email.com",
+                "phone": 555555556,
+            },
         ]
 
         clients = []
         for client_info in client_data:
-            client = await find_or_create_user(db, client_info['email'], {**client_info,
-                'role': UserRole.CLIENT,
-                'isActive': True,
-                'password': '$2b$12$Y2z.FHPWadE4.doQbvvFe.zdCuFi7H3dIVrViIXuqOgpxZ/14c5AS'
-            })
+            client = await find_or_create_user(
+                db,
+                client_info["email"],
+                {
+                    **client_info,
+                    "role": UserRole.CLIENT,
+                    "isActive": True,
+                    "password": "$2b$12$Y2z.FHPWadE4.doQbvvFe.zdCuFi7H3dIVrViIXuqOgpxZ/14c5AS",
+                },
+            )
             clients.append(client)
             users.append(client)
 
-        print(f"✅ Created {len(users)} users (1 admin, {len(managers)} managers, {len(staff_members)} staff, {len(clients)} clients)")
+        print(
+            f"✅ Created {len(users)} users (1 admin, {len(managers)} managers, {len(staff_members)} staff, {len(clients)} clients)"  # noqa: E501
+        )
 
         # 3. Create Addresses for clients
         addresses = []
         address_data = [
-            {'street': '123 Oak Street', 'city': 'Downtown'},
-            {'street': '456 Pine Avenue', 'city': 'Beachside'},
-            {'street': '789 Maple Drive', 'city': 'Gardens'},
-            {'street': '321 Cedar Lane', 'city': 'Uptown'},
-            {'street': '654 Birch Road', 'city': 'Riverside'},
-            {'street': '987 Elm Court', 'city': 'Hillside'},
+            {"street": "123 Oak Street", "city": "Downtown"},
+            {"street": "456 Pine Avenue", "city": "Beachside"},
+            {"street": "789 Maple Drive", "city": "Gardens"},
+            {"street": "321 Cedar Lane", "city": "Uptown"},
+            {"street": "654 Birch Road", "city": "Riverside"},
+            {"street": "987 Elm Court", "city": "Hillside"},
         ]
 
         result = await db.execute(select(Address))
@@ -211,9 +336,9 @@ async def main():
             else:
                 address = Address(
                     userId=client.id,
-                    street=address_data[i]['street'],
-                    city=address_data[i]['city'],
-                    isDefault=True
+                    street=address_data[i]["street"],
+                    city=address_data[i]["city"],
+                    isDefault=True,
                 )
                 db.add(address)
                 await db.commit()
@@ -229,10 +354,10 @@ async def main():
             for i in range(1, 16):
                 table = Table(
                     restaurantId=restaurant.id,
-                    number=f'T{i:02d}',
+                    number=f"T{i:02d}",
                     capacity=random.choice([2, 4, 4, 6, 8]),
                     isActive=True,
-                    qrCode=f'{restaurant.name.replace(" ", "")}-T{i:02d}',
+                    qrCode=f"{restaurant.name.replace(' ', '')}-T{i:02d}",
                 )
                 db.add(table)
                 await db.commit()
@@ -243,16 +368,86 @@ async def main():
 
         # 5. Create Inventory Items for each restaurant
         inventory_items_data = [
-            {'itemName': 'Salmon Fillet', 'unit': 'kg', 'currentStock': 25, 'minStock': 5, 'unitCost': 18.0, 'supplier': 'Ocean Fresh'},
-            {'itemName': 'Beef Tenderloin', 'unit': 'kg', 'currentStock': 15, 'minStock': 3, 'unitCost': 45.0, 'supplier': 'Prime Cuts'},
-            {'itemName': 'Chicken Breast', 'unit': 'kg', 'currentStock': 30, 'minStock': 8, 'unitCost': 12.0, 'supplier': 'Farm Fresh'},
-            {'itemName': 'Fresh Mozzarella', 'unit': 'kg', 'currentStock': 10, 'minStock': 2, 'unitCost': 8.0, 'supplier': 'Artisan Cheese'},
-            {'itemName': 'Tomatoes', 'unit': 'kg', 'currentStock': 40, 'minStock': 10, 'unitCost': 3.0, 'supplier': 'Garden Fresh'},
-            {'itemName': 'Basil', 'unit': 'bunch', 'currentStock': 20, 'minStock': 5, 'unitCost': 2.5, 'supplier': 'Herb Garden'},
-            {'itemName': 'Olive Oil', 'unit': 'liter', 'currentStock': 12, 'minStock': 3, 'unitCost': 15.0, 'supplier': 'Mediterranean Gold'},
-            {'itemName': 'Pasta', 'unit': 'kg', 'currentStock': 50, 'minStock': 15, 'unitCost': 2.0, 'supplier': 'Italian Imports'},
-            {'itemName': 'Mint Leaves', 'unit': 'bunch', 'currentStock': 25, 'minStock': 8, 'unitCost': 2.0, 'supplier': 'Fresh Herbs'},
-            {'itemName': 'Shrimp', 'unit': 'kg', 'currentStock': 18, 'minStock': 4, 'unitCost': 22.0, 'supplier': 'Ocean Fresh'},
+            {
+                "itemName": "Salmon Fillet",
+                "unit": "kg",
+                "currentStock": 25,
+                "minStock": 5,
+                "unitCost": 18.0,
+                "supplier": "Ocean Fresh",
+            },
+            {
+                "itemName": "Beef Tenderloin",
+                "unit": "kg",
+                "currentStock": 15,
+                "minStock": 3,
+                "unitCost": 45.0,
+                "supplier": "Prime Cuts",
+            },
+            {
+                "itemName": "Chicken Breast",
+                "unit": "kg",
+                "currentStock": 30,
+                "minStock": 8,
+                "unitCost": 12.0,
+                "supplier": "Farm Fresh",
+            },
+            {
+                "itemName": "Fresh Mozzarella",
+                "unit": "kg",
+                "currentStock": 10,
+                "minStock": 2,
+                "unitCost": 8.0,
+                "supplier": "Artisan Cheese",
+            },
+            {
+                "itemName": "Tomatoes",
+                "unit": "kg",
+                "currentStock": 40,
+                "minStock": 10,
+                "unitCost": 3.0,
+                "supplier": "Garden Fresh",
+            },
+            {
+                "itemName": "Basil",
+                "unit": "bunch",
+                "currentStock": 20,
+                "minStock": 5,
+                "unitCost": 2.5,
+                "supplier": "Herb Garden",
+            },
+            {
+                "itemName": "Olive Oil",
+                "unit": "liter",
+                "currentStock": 12,
+                "minStock": 3,
+                "unitCost": 15.0,
+                "supplier": "Mediterranean Gold",
+            },
+            {
+                "itemName": "Pasta",
+                "unit": "kg",
+                "currentStock": 50,
+                "minStock": 15,
+                "unitCost": 2.0,
+                "supplier": "Italian Imports",
+            },
+            {
+                "itemName": "Mint Leaves",
+                "unit": "bunch",
+                "currentStock": 25,
+                "minStock": 8,
+                "unitCost": 2.0,
+                "supplier": "Fresh Herbs",
+            },
+            {
+                "itemName": "Shrimp",
+                "unit": "kg",
+                "currentStock": 18,
+                "minStock": 4,
+                "unitCost": 22.0,
+                "supplier": "Ocean Fresh",
+            },
         ]
 
         all_inventory = []
@@ -261,13 +456,13 @@ async def main():
             for item_data in inventory_items_data:
                 inventory = Inventory(
                     restaurantId=restaurant.id,
-                    name=item_data['itemName'],
+                    name=item_data["itemName"],
                     description=f"High quality {item_data['itemName'].lower()} for restaurant use",
-                    unit=item_data['unit'],
-                    currentStock=item_data['currentStock'] + random.randint(-5, 10),
-                    minimumStock=item_data['minStock'],
-                    unitPrice=item_data['unitCost'],
-                    supplier=item_data['supplier']
+                    unit=item_data["unit"],
+                    currentStock=item_data["currentStock"] + random.randint(-5, 10),
+                    minimumStock=item_data["minStock"],
+                    unitPrice=item_data["unitCost"],
+                    supplier=item_data["supplier"],
                 )
                 db.add(inventory)
                 await db.commit()
@@ -278,58 +473,210 @@ async def main():
 
         # 6. Create Comprehensive Menus and Dishes
         menu_categories = [
-            'Appetizers', 'Salads', 'Main Courses', 'Pasta & Risotto',
-            'Seafood', 'Vegetarian', 'Desserts', 'Beverages', 'Cocktails'
+            "Appetizers",
+            "Salads",
+            "Main Courses",
+            "Pasta & Risotto",
+            "Seafood",
+            "Vegetarian",
+            "Desserts",
+            "Beverages",
+            "Cocktails",
         ]
 
         dishes_database = {
-            'Appetizers': [
-                {'name': 'Bruschetta Trio', 'description': 'Three varieties: classic tomato basil, mushroom truffle, and avocado lime', 'price': 12.0, 'prep_time': 10},
-                {'name': 'Calamari Fritti', 'description': 'Crispy fried squid rings with marinara and garlic aioli', 'price': 14.0, 'prep_time': 12},
-                {'name': 'Cheese & Charcuterie Board', 'description': 'Selection of artisan cheeses, cured meats, nuts, and preserves', 'price': 18.0, 'prep_time': 8},
-                {'name': 'Shrimp Cocktail', 'description': 'Jumbo shrimp with house cocktail sauce and lemon', 'price': 16.0, 'prep_time': 5},
+            "Appetizers": [
+                {
+                    "name": "Bruschetta Trio",
+                    "description": "Three varieties: classic tomato basil, mushroom truffle, and avocado lime",
+                    "price": 12.0,
+                    "prep_time": 10,
+                },
+                {
+                    "name": "Calamari Fritti",
+                    "description": "Crispy fried squid rings with marinara and garlic aioli",
+                    "price": 14.0,
+                    "prep_time": 12,
+                },
+                {
+                    "name": "Cheese & Charcuterie Board",
+                    "description": "Selection of artisan cheeses, cured meats, nuts, and preserves",
+                    "price": 18.0,
+                    "prep_time": 8,
+                },
+                {
+                    "name": "Shrimp Cocktail",
+                    "description": "Jumbo shrimp with house cocktail sauce and lemon",
+                    "price": 16.0,
+                    "prep_time": 5,
+                },
             ],
-            'Salads': [
-                {'name': 'Caesar Salad', 'description': 'Crisp romaine, parmesan, croutons, and house Caesar dressing', 'price': 10.0, 'prep_time': 8},
-                {'name': 'Mediterranean Bowl', 'description': 'Mixed greens, olives, feta, tomatoes, cucumber, and oregano vinaigrette', 'price': 12.0, 'prep_time': 10},
-                {'name': 'Quinoa Power Salad', 'description': 'Quinoa, kale, avocado, nuts, dried cranberries, and lemon tahini dressing', 'price': 14.0, 'prep_time': 12},
+            "Salads": [
+                {
+                    "name": "Caesar Salad",
+                    "description": "Crisp romaine, parmesan, croutons, and house Caesar dressing",
+                    "price": 10.0,
+                    "prep_time": 8,
+                },
+                {
+                    "name": "Mediterranean Bowl",
+                    "description": "Mixed greens, olives, feta, tomatoes, cucumber, and oregano vinaigrette",
+                    "price": 12.0,
+                    "prep_time": 10,
+                },
+                {
+                    "name": "Quinoa Power Salad",
+                    "description": "Quinoa, kale, avocado, nuts, dried cranberries, and lemon tahini dressing",
+                    "price": 14.0,
+                    "prep_time": 12,
+                },
             ],
-            'Main Courses': [
-                {'name': 'Grilled Salmon', 'description': 'Atlantic salmon with lemon herb butter and seasonal vegetables', 'price': 26.0, 'prep_time': 20},
-                {'name': 'Beef Tenderloin', 'description': '8oz filet mignon with red wine reduction and garlic mashed potatoes', 'price': 34.0, 'prep_time': 25},
-                {'name': 'Chicken Parmigiana', 'description': 'Breaded chicken breast with marinara, mozzarella, and spaghetti', 'price': 22.0, 'prep_time': 22},
-                {'name': 'Lamb Rack', 'description': 'Herb-crusted rack of lamb with mint chimichurri and roasted vegetables', 'price': 32.0, 'prep_time': 28},
+            "Main Courses": [
+                {
+                    "name": "Grilled Salmon",
+                    "description": "Atlantic salmon with lemon herb butter and seasonal vegetables",
+                    "price": 26.0,
+                    "prep_time": 20,
+                },
+                {
+                    "name": "Beef Tenderloin",
+                    "description": "8oz filet mignon with red wine reduction and garlic mashed potatoes",
+                    "price": 34.0,
+                    "prep_time": 25,
+                },
+                {
+                    "name": "Chicken Parmigiana",
+                    "description": "Breaded chicken breast with marinara, mozzarella, and spaghetti",
+                    "price": 22.0,
+                    "prep_time": 22,
+                },
+                {
+                    "name": "Lamb Rack",
+                    "description": "Herb-crusted rack of lamb with mint chimichurri and roasted vegetables",
+                    "price": 32.0,
+                    "prep_time": 28,
+                },
             ],
-            'Pasta & Risotto': [
-                {'name': 'Spaghetti Carbonara', 'description': 'Classic Roman pasta with eggs, pecorino, pancetta, and black pepper', 'price': 18.0, 'prep_time': 15},
-                {'name': 'Lobster Ravioli', 'description': 'House-made ravioli filled with lobster in cream sauce', 'price': 24.0, 'prep_time': 18},
-                {'name': 'Mushroom Risotto', 'description': 'Creamy Arborio rice with wild mushrooms and truffle oil', 'price': 20.0, 'prep_time': 25},
+            "Pasta & Risotto": [
+                {
+                    "name": "Spaghetti Carbonara",
+                    "description": "Classic Roman pasta with eggs, pecorino, pancetta, and black pepper",
+                    "price": 18.0,
+                    "prep_time": 15,
+                },
+                {
+                    "name": "Lobster Ravioli",
+                    "description": "House-made ravioli filled with lobster in cream sauce",
+                    "price": 24.0,
+                    "prep_time": 18,
+                },
+                {
+                    "name": "Mushroom Risotto",
+                    "description": "Creamy Arborio rice with wild mushrooms and truffle oil",
+                    "price": 20.0,
+                    "prep_time": 25,
+                },
             ],
-            'Seafood': [
-                {'name': 'Pan-Seared Halibut', 'description': 'Fresh halibut with citrus beurre blanc and asparagus', 'price': 29.0, 'prep_time': 18},
-                {'name': 'Seafood Paella', 'description': 'Traditional Spanish rice with shrimp, mussels, and clams', 'price': 26.0, 'prep_time': 35},
-                {'name': 'Tuna Tataki', 'description': 'Seared ahi tuna with sesame crust and wasabi aioli', 'price': 24.0, 'prep_time': 12},
+            "Seafood": [
+                {
+                    "name": "Pan-Seared Halibut",
+                    "description": "Fresh halibut with citrus beurre blanc and asparagus",
+                    "price": 29.0,
+                    "prep_time": 18,
+                },
+                {
+                    "name": "Seafood Paella",
+                    "description": "Traditional Spanish rice with shrimp, mussels, and clams",
+                    "price": 26.0,
+                    "prep_time": 35,
+                },
+                {
+                    "name": "Tuna Tataki",
+                    "description": "Seared ahi tuna with sesame crust and wasabi aioli",
+                    "price": 24.0,
+                    "prep_time": 12,
+                },
             ],
-            'Vegetarian': [
-                {'name': 'Eggplant Parmigiana', 'description': 'Breaded eggplant layers with marinara and mozzarella', 'price': 18.0, 'prep_time': 20},
-                {'name': 'Vegetable Curry', 'description': 'Coconut curry with seasonal vegetables and basmati rice', 'price': 16.0, 'prep_time': 18},
-                {'name': 'Buddha Bowl', 'description': 'Quinoa, roasted vegetables, avocado, and tahini dressing', 'price': 15.0, 'prep_time': 15},
+            "Vegetarian": [
+                {
+                    "name": "Eggplant Parmigiana",
+                    "description": "Breaded eggplant layers with marinara and mozzarella",
+                    "price": 18.0,
+                    "prep_time": 20,
+                },
+                {
+                    "name": "Vegetable Curry",
+                    "description": "Coconut curry with seasonal vegetables and basmati rice",
+                    "price": 16.0,
+                    "prep_time": 18,
+                },
+                {
+                    "name": "Buddha Bowl",
+                    "description": "Quinoa, roasted vegetables, avocado, and tahini dressing",
+                    "price": 15.0,
+                    "prep_time": 15,
+                },
             ],
-            'Desserts': [
-                {'name': 'Tiramisu', 'description': 'Classic Italian dessert with coffee-soaked ladyfingers and mascarpone', 'price': 8.0, 'prep_time': 5},
-                {'name': 'Chocolate Lava Cake', 'description': 'Warm chocolate cake with molten center and vanilla ice cream', 'price': 9.0, 'prep_time': 12},
-                {'name': 'Crème Brûlée', 'description': 'Vanilla custard with caramelized sugar crust', 'price': 7.0, 'prep_time': 3},
+            "Desserts": [
+                {
+                    "name": "Tiramisu",
+                    "description": "Classic Italian dessert with coffee-soaked ladyfingers and mascarpone",
+                    "price": 8.0,
+                    "prep_time": 5,
+                },
+                {
+                    "name": "Chocolate Lava Cake",
+                    "description": "Warm chocolate cake with molten center and vanilla ice cream",
+                    "price": 9.0,
+                    "prep_time": 12,
+                },
+                {
+                    "name": "Crème Brûlée",
+                    "description": "Vanilla custard with caramelized sugar crust",
+                    "price": 7.0,
+                    "prep_time": 3,
+                },
             ],
-            'Beverages': [
-                {'name': 'Fresh Orange Juice', 'description': 'Freshly squeezed Valencia oranges', 'price': 4.0, 'prep_time': 3},
-                {'name': 'Sparkling Water', 'description': 'Premium sparkling water with lemon', 'price': 3.0, 'prep_time': 2},
-                {'name': 'Iced Tea', 'description': 'House-brewed black tea served over ice', 'price': 3.5, 'prep_time': 2},
+            "Beverages": [
+                {
+                    "name": "Fresh Orange Juice",
+                    "description": "Freshly squeezed Valencia oranges",
+                    "price": 4.0,
+                    "prep_time": 3,
+                },
+                {
+                    "name": "Sparkling Water",
+                    "description": "Premium sparkling water with lemon",
+                    "price": 3.0,
+                    "prep_time": 2,
+                },
+                {
+                    "name": "Iced Tea",
+                    "description": "House-brewed black tea served over ice",
+                    "price": 3.5,
+                    "prep_time": 2,
+                },
             ],
-            'Cocktails': [
-                {'name': 'Classic Mojito', 'description': 'White rum, mint, lime, sugar, and soda water', 'price': 10.0, 'prep_time': 5},
-                {'name': 'Old Fashioned', 'description': 'Bourbon, sugar, bitters, and orange peel', 'price': 12.0, 'prep_time': 4},
-                {'name': 'Margarita', 'description': 'Tequila, triple sec, lime juice, and salt rim', 'price': 11.0, 'prep_time': 4},
-            ]
+            "Cocktails": [
+                {
+                    "name": "Classic Mojito",
+                    "description": "White rum, mint, lime, sugar, and soda water",
+                    "price": 10.0,
+                    "prep_time": 5,
+                },
+                {
+                    "name": "Old Fashioned",
+                    "description": "Bourbon, sugar, bitters, and orange peel",
+                    "price": 12.0,
+                    "prep_time": 4,
+                },
+                {
+                    "name": "Margarita",
+                    "description": "Tequila, triple sec, lime juice, and salt rim",
+                    "price": 11.0,
+                    "prep_time": 4,
+                },
+            ],
         }
 
         all_dishes = []
@@ -338,8 +685,8 @@ async def main():
         for restaurant in restaurants:
             menu = Menu(
                 restaurantId=restaurant.id,
-                name=f'{restaurant.name} Menu',
-                description=f'Signature dishes and beverages at {restaurant.name}'
+                name=f"{restaurant.name} Menu",
+                description=f"Signature dishes and beverages at {restaurant.name}",
             )
             db.add(menu)
             await db.commit()
@@ -351,8 +698,8 @@ async def main():
                     category = MenuCategory(
                         menuId=menu.id,
                         name=category_name,
-                        description=f'{category_name} selection at {restaurant.name}',
-                        displayOrder=list(menu_categories).index(category_name)
+                        description=f"{category_name} selection at {restaurant.name}",
+                        displayOrder=list(menu_categories).index(category_name),
                     )
                     db.add(category)
                     await db.commit()
@@ -361,13 +708,13 @@ async def main():
                     for dish_data in dishes_database[category_name]:
                         dish = Dish(
                             categoryId=category.id,
-                            name=dish_data['name'],
-                            description=dish_data['description'],
-                            price=dish_data['price'],
+                            name=dish_data["name"],
+                            description=dish_data["description"],
+                            price=dish_data["price"],
                             isAvailable=True,
                             quantity=random.randint(50, 200),
-                            preparationTime=dish_data['prep_time'],
-                            popularity=random.uniform(3.5, 5.0)
+                            preparationTime=dish_data["prep_time"],
+                            popularity=random.uniform(3.5, 5.0),
                         )
                         db.add(dish)
                         await db.commit()
@@ -380,20 +727,20 @@ async def main():
 
         # 7. Create Ingredients (link dishes to inventory)
         ingredient_mappings = [
-            ('Grilled Salmon', 'Salmon Fillet', 0.2),
-            ('Pan-Seared Halibut', 'Salmon Fillet', 0.18),
-            ('Seafood Paella', 'Shrimp', 0.15),
-            ('Shrimp Cocktail', 'Shrimp', 0.1),
-            ('Beef Tenderloin', 'Beef Tenderloin', 0.25),
-            ('Chicken Parmigiana', 'Chicken Breast', 0.2),
-            ('Spaghetti Carbonara', 'Pasta', 0.1),
-            ('Lobster Ravioli', 'Pasta', 0.12),
-            ('Eggplant Parmigiana', 'Fresh Mozzarella', 0.05),
-            ('Buddha Bowl', 'Tomatoes', 0.08),
-            ('Bruschetta Trio', 'Tomatoes', 0.05),
-            ('Bruschetta Trio', 'Basil', 0.02),
-            ('Cheese & Charcuterie Board', 'Fresh Mozzarella', 0.1),
-            ('Classic Mojito', 'Mint Leaves', 0.01),
+            ("Grilled Salmon", "Salmon Fillet", 0.2),
+            ("Pan-Seared Halibut", "Salmon Fillet", 0.18),
+            ("Seafood Paella", "Shrimp", 0.15),
+            ("Shrimp Cocktail", "Shrimp", 0.1),
+            ("Beef Tenderloin", "Beef Tenderloin", 0.25),
+            ("Chicken Parmigiana", "Chicken Breast", 0.2),
+            ("Spaghetti Carbonara", "Pasta", 0.1),
+            ("Lobster Ravioli", "Pasta", 0.12),
+            ("Eggplant Parmigiana", "Fresh Mozzarella", 0.05),
+            ("Buddha Bowl", "Tomatoes", 0.08),
+            ("Bruschetta Trio", "Tomatoes", 0.05),
+            ("Bruschetta Trio", "Basil", 0.02),
+            ("Cheese & Charcuterie Board", "Fresh Mozzarella", 0.1),
+            ("Classic Mojito", "Mint Leaves", 0.01),
         ]
 
         ingredients_created = 0
@@ -403,12 +750,15 @@ async def main():
             for dish in dishes:
                 for dish_name, inventory_name, quantity in ingredient_mappings:
                     if dish.name == dish_name:
-                        inventory_item = next((inv for inv in restaurant_inventory if inv.name == inventory_name), None)
+                        inventory_item = next(
+                            (inv for inv in restaurant_inventory if inv.name == inventory_name),
+                            None,
+                        )
                         if inventory_item:
                             link = DishInventoryLink(
                                 dishId=dish.id,
                                 InventoryId=inventory_item.id,
-                                quantity=quantity
+                                quantity=quantity,
                             )
                             db.add(link)
                             ingredients_created += 1
@@ -419,10 +769,7 @@ async def main():
         # 8. Create Loyalty Cards for clients
         loyalty_cards = []
         for client in clients:
-            loyalty_card = LoyaltyCard(
-                userId=client.id,
-                points=random.randint(100, 500)
-            )
+            loyalty_card = LoyaltyCard(userId=client.id, points=random.randint(100, 500))
             db.add(loyalty_card)
             await db.commit()
             await db.refresh(loyalty_card)
@@ -433,34 +780,30 @@ async def main():
         # 9. Create Promotions
         promotion_data = [
             {
-                'title': 'Happy Hour Special',
-                'description': '50% off all cocktails from 5-7pm',
-                'type': 'HAPPY_HOUR',
-                'discountType': 'PERCENTAGE',
-                'discountValue': 50.0,
-                'startDate': datetime.now(),
-                'endDate': datetime.now() + timedelta(days=30)
+                "title": "Happy Hour Special",
+                "description": "50% off all cocktails from 5-7pm",
+                "type": "HAPPY_HOUR",
+                "discountType": "PERCENTAGE",
+                "discountValue": 50.0,
+                "startDate": datetime.now(),
+                "endDate": datetime.now() + timedelta(days=30),
             },
             {
-                'title': 'Weekend Family Deal',
-                'description': '20% off orders over $50',
-                'type': 'DISCOUNT',
-                'discountType': 'PERCENTAGE',
-                'discountValue': 20.0,
-                'minOrderAmount': 50.0,
-                'startDate': datetime.now(),
-                'endDate': datetime.now() + timedelta(days=60)
-            }
+                "title": "Weekend Family Deal",
+                "description": "20% off orders over $50",
+                "type": "DISCOUNT",
+                "discountType": "PERCENTAGE",
+                "discountValue": 20.0,
+                "minOrderAmount": 50.0,
+                "startDate": datetime.now(),
+                "endDate": datetime.now() + timedelta(days=60),
+            },
         ]
 
         promotions = []
         for restaurant in restaurants:
             for promo_data in promotion_data:
-                promotion = Promotion(
-                    restaurantId=restaurant.id,
-                    **promo_data,
-                    isActive=True
-                )
+                promotion = Promotion(restaurantId=restaurant.id, **promo_data, isActive=True)
                 db.add(promotion)
                 await db.commit()
                 await db.refresh(promotion)
@@ -480,7 +823,7 @@ async def main():
                 tableId=table.id,
                 reservationStart=datetime.now() + timedelta(days=1, hours=19),
                 reservationEnd=datetime.now() + timedelta(days=1, hours=21),
-                status=ReservationStatus.CONFIRMED
+                status=ReservationStatus.CONFIRMED,
             )
             db.add(reservation)
             await db.commit()
@@ -501,7 +844,15 @@ async def main():
             *[now - timedelta(days=d, hours=random.randint(8, 20)) for d in [7, 10, 14, 18, 21, 25, 28]],
         ]
 
-        order_statuses = ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'PREPARING', 'READY', 'CONFIRMED']
+        order_statuses = [
+            "COMPLETED",
+            "COMPLETED",
+            "COMPLETED",
+            "COMPLETED",
+            "PREPARING",
+            "READY",
+            "CONFIRMED",
+        ]
 
         for idx, order_time in enumerate(time_slots):
             client = clients[idx % len(clients)]
@@ -516,7 +867,7 @@ async def main():
             total_amount = round(subtotal + random.uniform(2, 8), 2)
 
             status_str = random.choice(order_statuses)
-            order_type_str = random.choice(['DINE_IN', 'TAKEAWAY', 'DELIVERY'])
+            order_type_str = random.choice(["DINE_IN", "TAKEAWAY", "DELIVERY"])
 
             confirmed_at = order_time + timedelta(minutes=random.randint(2, 10))
             prepared_at = None
@@ -524,17 +875,17 @@ async def main():
             completed_at = None
 
             prep_time_minutes = random.randint(5, 40)
-            if status_str in ('COMPLETED', 'READY', 'PREPARING'):
+            if status_str in ("COMPLETED", "READY", "PREPARING"):
                 prepared_at = confirmed_at + timedelta(minutes=prep_time_minutes)
-            if status_str in ('COMPLETED', 'READY'):
+            if status_str in ("COMPLETED", "READY"):
                 ready_at = prepared_at + timedelta(minutes=random.randint(2, 8))
-            if status_str == 'COMPLETED':
+            if status_str == "COMPLETED":
                 completed_at = ready_at + timedelta(minutes=random.randint(1, 5))
 
             delivery_est = confirmed_at + timedelta(minutes=random.randint(20, 50))
 
             order = Order(
-                orderNumber=f'ORD-{order_counter}',
+                orderNumber=f"ORD-{order_counter}",
                 userId=client.id,
                 restaurantId=restaurant.id,
                 tableId=table.id,
@@ -548,7 +899,9 @@ async def main():
                 estimatedDeliveryTime=delivery_est,
                 subtotal=subtotal,
                 totalAmount=total_amount,
-                paymentStatus=PaymentStatus('PAID' if status_str == 'COMPLETED' else random.choice(['PAID', 'PENDING'])),
+                paymentStatus=PaymentStatus(
+                    "PAID" if status_str == "COMPLETED" else random.choice(["PAID", "PENDING"])
+                ),
             )
             db.add(order)
             await db.commit()
@@ -585,13 +938,15 @@ async def main():
                 restaurantId=order.restaurantId,
                 dishId=random_item.dishId,
                 rating=random.randint(4, 5),
-                comment=random.choice([
-                    'Amazing food and excellent service!',
-                    'Delicious meal, will definitely come back.',
-                    'Great atmosphere and tasty dishes.',
-                    'Outstanding dining experience!'
-                ]),
-                isVerified=True
+                comment=random.choice(
+                    [
+                        "Amazing food and excellent service!",
+                        "Delicious meal, will definitely come back.",
+                        "Great atmosphere and tasty dishes.",
+                        "Outstanding dining experience!",
+                    ]
+                ),
+                isVerified=True,
             )
             db.add(review)
             await db.commit()
@@ -612,8 +967,8 @@ async def main():
                         loyaltyCardId=loyalty_card.id,
                         restaurantId=order.restaurantId,
                         points=points_earned,
-                        type='EARNED',
-                        description=f'Points earned from order {order.orderNumber}'
+                        type="EARNED",
+                        description=f"Points earned from order {order.orderNumber}",
                     )
                     db.add(transaction)
                     await db.commit()
@@ -643,5 +998,5 @@ async def main():
     await engine.dispose()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

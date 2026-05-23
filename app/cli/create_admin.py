@@ -1,11 +1,9 @@
 """Admin user creation logic for the CLI."""
 
-import asyncio
+from sqlalchemy import or_, select
 
-from sqlalchemy import select, or_
-
-from app.core.database import connect_db, disconnect_db, get_db
 from app.auth.jwt import get_password_hash
+from app.core.database import connect_db, disconnect_db, get_db
 from app.models.sqlalchemy_models import User, UserRole
 
 
@@ -21,9 +19,7 @@ async def create_admin_user(
     try:
         db = get_db()
 
-        result = await db.execute(
-            select(User).where(or_(User.email == email, User.phone == phone))
-        )
+        result = await db.execute(select(User).where(or_(User.email == email, User.phone == phone)))
         existing_user = result.scalar_one_or_none()
 
         if existing_user:

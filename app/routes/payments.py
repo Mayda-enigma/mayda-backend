@@ -1,18 +1,21 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import Optional
 import requests
-from app.models.payment import (
-    PaymentResponse, PaymentInitiateRequest,
-    PaymentInitiateResponse, PaymentStatusResponse, PaymentListResponse,
-    GUIDINI_PAY_URL, GUIDINI_PAY_HEADERS
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.core.database import get_db_session
-from app.models.sqlalchemy_models import Payments, Order, User, Restaurant
-from app.middleware.roles import get_current_user, get_current_staff_user
 
+from app.core.database import get_db_session
+from app.middleware.roles import get_current_staff_user, get_current_user
+from app.models.payment import (
+    GUIDINI_PAY_HEADERS,
+    GUIDINI_PAY_URL,
+    PaymentInitiateRequest,
+    PaymentInitiateResponse,
+    PaymentListResponse,
+    PaymentResponse,
+    PaymentStatusResponse,
+)
+from app.models.sqlalchemy_models import Order, Payments
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -32,15 +35,14 @@ async def initiate_payment_with_otp(
     if not sms_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SMS service is not available for secure payments"
+            detail="SMS service is not available for secure payments",
         )
-
 
     # Check if Guidini Pay is configured
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment gateway is not configured. Please contact support."
+            detail="Payment gateway is not configured. Please contact support.",
         )
 
     try:
@@ -54,24 +56,18 @@ async def initiate_payment_with_otp(
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only pay for your own orders"
+                detail="You can only pay for your own orders",
             )
 
         # Check if order is already paid
         if order.paymentStatus == "PAID":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Order is already paid"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order is already paid")
 
         # Send OTP for payment confirmation
         otp_result = await sms_service.send_otp(current_user.id, str(current_user.phone), "PAYMENT_CONFIRMATION")
@@ -79,7 +75,7 @@ async def initiate_payment_with_otp(
         if not otp_result.get("success", False):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send OTP for payment verification"
+                detail="Failed to send OTP for payment verification",
             )
 
         return PaymentInitiateResponse(
@@ -88,7 +84,7 @@ async def initiate_payment_with_otp(
             paymentId=None,
             transactionId=None,
             formUrl=None,
-            amount=str(order.totalAmount)
+            amount=str(order.totalAmount),
         )
 
     except HTTPException:
@@ -96,7 +92,7 @@ async def initiate_payment_with_otp(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to initiate secure payment: {str(e)}"
+            detail=f"Failed to initiate secure payment: {str(e)}",
         )
 
 
@@ -115,7 +111,7 @@ async def initiate_payment(
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment gateway is not configured. Please contact support."
+            detail="Payment gateway is not configured. Please contact support.",
         )
 
     try:
@@ -129,52 +125,39 @@ async def initiate_payment(
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only pay for your own orders"
+                detail="You can only pay for your own orders",
             )
 
         # Check if order is already paid
         if order.paymentStatus == "PAID":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Order is already paid"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order is already paid")
 
         # Check if payment already exists for this order
         existing_payment = (
-            await db.execute(
-                select(Payments).where(Payments.orderId == payment_request.orderId)
-            )
+            await db.execute(select(Payments).where(Payments.orderId == payment_request.orderId))
         ).scalar_one_or_none()
 
         if existing_payment:
             return PaymentInitiateResponse(
                 success=False,
                 message="Payment already exists for this order",
-                error="PAYMENT_EXISTS"
+                error="PAYMENT_EXISTS",
             )
 
         # Prepare Guidini Pay request
         guidini_data = {
             "amount": str(int(order.totalAmount * 100)),  # Convert to cents
-            "language": payment_request.language
+            "language": payment_request.language,
         }
 
         # Call Guidini Pay API
-        response = requests.post(
-            GUIDINI_PAY_URL,
-            json=guidini_data,
-            headers=GUIDINI_PAY_HEADERS,
-            timeout=30
-        )
+        response = requests.post(GUIDINI_PAY_URL, json=guidini_data, headers=GUIDINI_PAY_HEADERS, timeout=30)
 
         # Try to parse the response regardless of status code
         try:
@@ -182,14 +165,14 @@ async def initiate_payment(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Invalid JSON response from payment gateway. Status: {response.status_code}, Response: {response.text}"
+                detail=f"Invalid JSON response from payment gateway. Status: {response.status_code}, Response: {response.text}",  # noqa: E501
             )
 
         # Check if response has expected structure
         if "data" not in guidini_response:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Unexpected payment gateway response format: {guidini_response}"
+                detail=f"Unexpected payment gateway response format: {guidini_response}",
             )
 
         # Extract transaction data
@@ -199,19 +182,16 @@ async def initiate_payment(
         # Extract form_url and clean it if it has markdown brackets
         form_url = transaction_data["attributes"]["form_url"]
         # Remove markdown brackets if present: [url](url) -> url
-        if form_url.startswith('[') and '](' in form_url and form_url.endswith(')'):
+        if form_url.startswith("[") and "](" in form_url and form_url.endswith(")"):
             # Extract URL from markdown format [text](url)
-            start = form_url.find('](') + 2
-            end = form_url.rfind(')')
+            start = form_url.find("](") + 2
+            end = form_url.rfind(")")
             form_url = form_url[start:end]
 
         amount = transaction_data["attributes"]["amount"]
 
         # Create payment record in database
-        payment = Payments(
-            paymentId=transaction_id,
-            orderId=payment_request.orderId
-        )
+        payment = Payments(paymentId=transaction_id, orderId=payment_request.orderId)
         db.add(payment)
         await db.commit()
         await db.refresh(payment)
@@ -222,18 +202,18 @@ async def initiate_payment(
             transactionId=transaction_id,
             formUrl=form_url,
             amount=amount,
-            message="Payment initiated successfully"
+            message="Payment initiated successfully",
         )
 
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Payment gateway connection error: {str(e)}"
+            detail=f"Payment gateway connection error: {str(e)}",
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to initiate payment: {str(e)}"
+            detail=f"Failed to initiate payment: {str(e)}",
         )
 
 
@@ -259,22 +239,19 @@ async def get_payment_receipt(
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check authorization: user owns the order OR user is staff of the restaurant
         is_owner = current_user.role == "CLIENT" and order.userId == current_user.id
         is_restaurant_staff = (
-            current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"] and
-            current_user.restaurantId == order.restaurantId
+            current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"]
+            and current_user.restaurantId == order.restaurantId
         )
 
         if not (is_owner or is_restaurant_staff):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only download receipts for your own orders or your restaurant's orders"
+                detail="You can only download receipts for your own orders or your restaurant's orders",
             )
 
         # Make request to Guidini Pay receipt API
@@ -282,14 +259,11 @@ async def get_payment_receipt(
             "https://epay.guiddini.dz/api/payment/receipt",
             json={"order_number": order_number},
             headers=GUIDINI_PAY_HEADERS,
-            timeout=30
+            timeout=30,
         )
 
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Payment gateway error"
-            )
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Payment gateway error")
 
         # Return the Guidini Pay receipt response directly
         return response.json()
@@ -297,12 +271,14 @@ async def get_payment_receipt(
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Payment gateway connection error: {str(e)}"
+            detail=f"Payment gateway connection error: {str(e)}",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payment receipt: {str(e)}"
+            detail=f"Failed to retrieve payment receipt: {str(e)}",
         )
 
 
@@ -328,22 +304,19 @@ async def show_payment_status(
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check authorization: user owns the order OR user is staff of the restaurant
         is_owner = current_user.role == "CLIENT" and order.userId == current_user.id
         is_restaurant_staff = (
-            current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"] and
-            current_user.restaurantId == order.restaurantId
+            current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"]
+            and current_user.restaurantId == order.restaurantId
         )
 
         if not (is_owner or is_restaurant_staff):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view payment status for your own orders or your restaurant's orders"
+                detail="You can only view payment status for your own orders or your restaurant's orders",
             )
 
         # Make request to Guidini Pay show API
@@ -351,14 +324,11 @@ async def show_payment_status(
             "https://epay.guiddini.dz/api/payment/show",
             json={"order_number": order_number},
             headers=GUIDINI_PAY_HEADERS,
-            timeout=30
+            timeout=30,
         )
 
         if response.status_code != 200:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Payment gateway error"
-            )
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Payment gateway error")
 
         # Return the Guidini Pay response directly
         return response.json()
@@ -366,71 +336,18 @@ async def show_payment_status(
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Payment gateway connection error: {str(e)}"
+            detail=f"Payment gateway connection error: {str(e)}",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payment status: {str(e)}"
+            detail=f"Failed to retrieve payment status: {str(e)}",
         )
 
 
-@router.get("/{payment_id}", response_model=PaymentResponse)
-async def get_payment(
-    payment_id: int,
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get payment details by ID."""
-
-    try:
-        payment = (
-            await db.execute(
-                select(Payments)
-                .where(Payments.id == payment_id)
-                .options(
-                    selectinload(Payments.order).selectinload(Order.user),
-                    selectinload(Payments.order).selectinload(Order.restaurant),
-                )
-            )
-        ).scalar_one_or_none()
-
-        if not payment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Payment not found"
-            )
-
-        # Check if user owns the payment (unless they're staff)
-        if current_user.role == "CLIENT" and payment.order.userId != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view your own payments"
-            )
-
-        return PaymentResponse(
-            id=payment.id,
-            paymentId=payment.paymentId,
-            orderId=payment.orderId,
-            order={
-                "orderNumber": payment.order.orderNumber,
-                "totalAmount": payment.order.totalAmount,
-                "paymentStatus": payment.order.paymentStatus,
-                "restaurant": {
-                    "name": payment.order.restaurant.name
-                }
-            },
-            createdAt=payment.createdAt
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payment: {str(e)}"
-        )
-
-
-@router.get("/order/{order_id}", response_model=Optional[PaymentStatusResponse])
+@router.get("/order/{order_id}", response_model=PaymentStatusResponse | None)  # noqa: UP045
 async def get_payment_by_order(
     order_id: int,
     current_user=Depends(get_current_user),
@@ -449,24 +366,17 @@ async def get_payment_by_order(
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view payments for your own orders"
+                detail="You can only view payments for your own orders",
             )
 
         # Get the payment for this order
-        payment = (
-            await db.execute(
-                select(Payments).where(Payments.orderId == order_id)
-            )
-        ).scalar_one_or_none()
+        payment = (await db.execute(select(Payments).where(Payments.orderId == order_id))).scalar_one_or_none()
 
         if not payment:
             return None
@@ -478,13 +388,13 @@ async def get_payment_by_order(
             orderNumber=order.orderNumber,
             amount=order.totalAmount,
             status=order.paymentStatus,
-            createdAt=payment.createdAt
+            createdAt=payment.createdAt,
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payment status: {str(e)}"
+            detail=f"Failed to retrieve payment status: {str(e)}",
         )
 
 
@@ -492,7 +402,7 @@ async def get_payment_by_order(
 async def list_payments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    restaurant_id: Optional[int] = Query(None),
+    restaurant_id: int | None = Query(None),
     current_user=Depends(get_current_staff_user),
     db: AsyncSession = Depends(get_db_session),
 ):
@@ -515,7 +425,7 @@ async def list_payments(
             if current_user.restaurantId and current_user.restaurantId != restaurant_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can only view payments for your restaurant"
+                    detail="You can only view payments for your restaurant",
                 )
             base_query = base_query.join(Payments.order).where(Order.restaurantId == restaurant_id)
             count_query = count_query.join(Payments.order).where(Order.restaurantId == restaurant_id)
@@ -528,38 +438,36 @@ async def list_payments(
 
         # Get payments with pagination
         payments = (
-            await db.execute(
-                base_query
-                .order_by(Payments.createdAt.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
+            (
+                await db.execute(
+                    base_query.order_by(Payments.createdAt.desc()).offset((page - 1) * page_size).limit(page_size)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         # Format response
         payment_list = []
         for payment in payments:
-            payment_list.append(PaymentStatusResponse(
-                id=payment.id,
-                paymentId=payment.paymentId,
-                orderId=payment.orderId,
-                orderNumber=payment.order.orderNumber,
-                amount=payment.order.totalAmount,
-                status=payment.order.paymentStatus,
-                createdAt=payment.createdAt
-            ))
+            payment_list.append(
+                PaymentStatusResponse(
+                    id=payment.id,
+                    paymentId=payment.paymentId,
+                    orderId=payment.orderId,
+                    orderNumber=payment.order.orderNumber,
+                    amount=payment.order.totalAmount,
+                    status=payment.order.paymentStatus,
+                    createdAt=payment.createdAt,
+                )
+            )
 
-        return PaymentListResponse(
-            payments=payment_list,
-            total=total,
-            page=page,
-            pageSize=page_size
-        )
+        return PaymentListResponse(payments=payment_list, total=total, page=page, pageSize=page_size)
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payments: {str(e)}"
+            detail=f"Failed to retrieve payments: {str(e)}",
         )
 
 
@@ -581,10 +489,7 @@ async def payment_callback(order_number: str = Query(...), db: AsyncSession = De
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Update the order payment status to PAID
         order.paymentStatus = "PAID"
@@ -599,13 +504,13 @@ async def payment_callback(order_number: str = Query(...), db: AsyncSession = De
             "orderId": order.id,
             "paymentStatus": "PAID",
             "totalAmount": order.totalAmount,
-            "restaurant": order.restaurant.name if order.restaurant else None
+            "restaurant": order.restaurant.name if order.restaurant else None,
         }
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process payment confirmation: {str(e)}"
+            detail=f"Failed to process payment confirmation: {str(e)}",
         )
 
 
@@ -643,29 +548,22 @@ async def update_payment_status(
         if new_status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid payment status. Must be one of: {valid_statuses}"
+                detail=f"Invalid payment status. Must be one of: {valid_statuses}",
             )
 
         # Get the order
         order = (
-            await db.execute(
-                select(Order)
-                .where(Order.id == order_id)
-                .options(selectinload(Order.restaurant))
-            )
+            await db.execute(select(Order).where(Order.id == order_id).options(selectinload(Order.restaurant)))
         ).scalar_one_or_none()
 
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         # Check if staff has access to this restaurant
         if current_user.restaurantId and current_user.restaurantId != order.restaurantId:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only update payments for your restaurant's orders"
+                detail="You can only update payments for your restaurant's orders",
             )
 
         # Update the order's payment status
@@ -677,11 +575,61 @@ async def update_payment_status(
             "success": True,
             "message": f"Payment status updated to {new_status}",
             "orderId": order_id,
-            "paymentStatus": new_status
+            "paymentStatus": new_status,
         }
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update payment status: {str(e)}"
+            detail=f"Failed to update payment status: {str(e)}",
+        )
+
+
+@router.get("/{payment_id}", response_model=PaymentResponse)
+async def get_payment(
+    payment_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get payment details by ID."""
+
+    try:
+        payment = (
+            await db.execute(
+                select(Payments)
+                .where(Payments.id == payment_id)
+                .options(
+                    selectinload(Payments.order).selectinload(Order.user),
+                    selectinload(Payments.order).selectinload(Order.restaurant),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not payment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+
+        # Check if user owns the payment (unless they're staff)
+        if current_user.role == "CLIENT" and payment.order.userId != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own payments",
+            )
+
+        return PaymentResponse(
+            id=payment.id,
+            paymentId=payment.paymentId,
+            orderId=payment.orderId,
+            order={
+                "orderNumber": payment.order.orderNumber,
+                "totalAmount": payment.order.totalAmount,
+                "paymentStatus": payment.order.paymentStatus,
+                "restaurant": {"name": payment.order.restaurant.name},
+            },
+            createdAt=payment.createdAt,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve payment: {str(e)}",
         )

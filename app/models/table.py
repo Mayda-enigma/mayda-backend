@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
 from enum import Enum
+
+from pydantic import BaseModel, Field
 
 
 class TableStatus(str, Enum):
@@ -14,8 +14,8 @@ class TableBase(BaseModel):
     capacity: int = Field(..., ge=1, le=20)
     isActive: bool = True
     status: TableStatus = TableStatus.AVAILABLE
-    qrCode: Optional[str] = None
-    nfcTag: Optional[str] = None
+    qrCode: str | None = None
+    nfcTag: str | None = None
 
 
 class TableCreate(TableBase):
@@ -23,12 +23,12 @@ class TableCreate(TableBase):
 
 
 class TableUpdate(BaseModel):
-    number: Optional[str] = Field(None, min_length=1, max_length=10)
-    capacity: Optional[int] = Field(None, ge=1, le=20)
-    isActive: Optional[bool] = None
-    status: Optional[TableStatus] = None
-    qrCode: Optional[str] = None
-    nfcTag: Optional[str] = None
+    number: str | None = Field(None, min_length=1, max_length=10)
+    capacity: int | None = Field(None, ge=1, le=20)
+    isActive: bool | None = None
+    status: TableStatus | None = None
+    qrCode: str | None = None
+    nfcTag: str | None = None
 
 
 class TableResponse(BaseModel):
@@ -38,11 +38,11 @@ class TableResponse(BaseModel):
     capacity: int
     isActive: bool
     status: TableStatus
-    qrCode: Optional[str]
-    nfcTag: Optional[str]
+    qrCode: str | None
+    nfcTag: str | None
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -53,8 +53,8 @@ class TableListResponse(BaseModel):
     capacity: int
     isActive: bool
     status: TableStatus
-    qrCode: Optional[str]
-    
+    qrCode: str | None
+
     class Config:
         from_attributes = True
 
@@ -69,4 +69,4 @@ class CurrentOccupantInfo(BaseModel):
 class TableCheckinResponse(BaseModel):
     tableId: int
     status: TableStatus
-    sessionId: Optional[int] = None
+    sessionId: int | None = None

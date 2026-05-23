@@ -4,22 +4,26 @@ All endpoints require a valid JWT. PII is stripped; only the internal user ID
 is forwarded to downstream services via the shared SERVICE_TOKEN header.
 """
 
-from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from app.core.config import settings
-from app.middleware.roles import get_current_user, get_current_staff_user, get_current_admin_user
+from app.middleware.roles import (
+    get_current_admin_user,
+    get_current_staff_user,
+    get_current_user,
+)
 from app.models.ai import (
+    Anomaly,
+    AnomalyAckResponse,
+    ForecastRequest,
+    ForecastResponse,
     RecommendRequest,
     RecommendResponse,
     SearchRequest,
     SearchResponse,
-    ForecastRequest,
-    ForecastResponse,
     TranscribeResponse,
-    Anomaly,
-    AnomalyAckResponse,
 )
-from app.utils.ai_proxy import proxy_to_service, proxy_multipart_to_service
+from app.utils.ai_proxy import proxy_multipart_to_service, proxy_to_service
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -53,6 +57,7 @@ async def recommend(
     )
     return result
 
+
 # TODO [BE-027]: Add rate limiting (5/min/IP)
 @router.post(
     "/search",
@@ -73,6 +78,7 @@ async def search(
         request=request,
     )
     return result
+
 
 @router.post(
     "/inventory/forecast",
@@ -95,6 +101,7 @@ async def forecast(
     )
     return result
 
+
 @router.post(
     "/voice/transcribe",
     response_model=TranscribeResponse,
@@ -113,10 +120,8 @@ async def transcribe(
         raise HTTPException(status_code=413, detail="Payload Too Large")
 
     audio_content = await audio.read()
-    
-    files = {
-        "audio": (audio.filename, audio_content, audio.content_type)
-    }
+
+    files = {"audio": (audio.filename, audio_content, audio.content_type)}
 
     result = await proxy_multipart_to_service(
         base_url=settings.VOICE_SERVICE_URL,
@@ -125,6 +130,7 @@ async def transcribe(
         request=request,
     )
     return result
+
 
 @router.get(
     "/anomalies",
@@ -147,6 +153,7 @@ async def get_anomalies(
         request=request,
     )
     return result
+
 
 @router.post(
     "/anomalies/{anomaly_id}/ack",

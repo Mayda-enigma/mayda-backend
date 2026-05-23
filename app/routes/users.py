@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, delete as sa_delete
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_user
 from app.models.sqlalchemy_models import PushToken, User
 from app.models.user import PushTokenResponse, PushTokenUpsertRequest
-
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -20,9 +20,7 @@ async def register_push_token(
     """Register or transfer a mobile push token for the current user."""
 
     existing_token = (
-        await db.execute(
-            select(PushToken).where(PushToken.token == push_token.token)
-        )
+        await db.execute(select(PushToken).where(PushToken.token == push_token.token))
     ).scalar_one_or_none()
 
     if existing_token:

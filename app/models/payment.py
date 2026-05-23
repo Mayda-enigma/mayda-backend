@@ -1,10 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
-from app.core.config import settings    
 
+from pydantic import BaseModel
 
-
+from app.core.config import settings
 
 # Guidini Pay API Configuration
 GUIDINI_PAY_URL = "https://epay.guiddini.dz/api/payment/initiate"
@@ -12,7 +10,7 @@ GUIDINI_PAY_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json",
     "x-app-key": settings.GUIDINI_APP_KEY,
-    "x-app-secret": settings.GUIDINI_API_KEY
+    "x-app-secret": settings.GUIDINI_API_KEY,
 }
 
 
@@ -24,9 +22,9 @@ class PaymentResponse(BaseModel):
     id: int
     paymentId: str  # Guidini Pay transaction ID
     orderId: int
-    order: Optional[dict] = None  # Order details
+    order: dict | None = None  # Order details
     createdAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -38,23 +36,23 @@ class PaymentInitiateRequest(BaseModel):
 
 class PaymentInitiateResponse(BaseModel):
     success: bool
-    paymentId: Optional[str] = None  # Internal payment record ID
-    transactionId: Optional[str] = None  # Guidini Pay transaction ID
-    formUrl: Optional[str] = None  # Payment form URL
-    amount: Optional[str] = None
+    paymentId: str | None = None  # Internal payment record ID
+    transactionId: str | None = None  # Guidini Pay transaction ID
+    formUrl: str | None = None  # Payment form URL
+    amount: str | None = None
     message: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class PaymentStatusResponse(BaseModel):
     id: int
     paymentId: str
     orderId: int
-    orderNumber: Optional[str] = None
+    orderNumber: str | None = None
     amount: float
     status: str  # From order.paymentStatus
     createdAt: datetime
-    
+
     class Config:
         from_attributes = True
 

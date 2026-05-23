@@ -1,12 +1,12 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 # Menu Models
 class MenuBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     isActive: bool = True
     displayOrder: int = Field(0, ge=0)
 
@@ -16,22 +16,22 @@ class MenuCreate(MenuBase):
 
 
 class MenuUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    isActive: Optional[bool] = None
-    displayOrder: Optional[int] = Field(None, ge=0)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    isActive: bool | None = None
+    displayOrder: int | None = Field(None, ge=0)
 
 
 class MenuResponse(BaseModel):
     id: int
     restaurantId: int
     name: str
-    description: Optional[str]
+    description: str | None
     isActive: bool
     displayOrder: int
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -39,8 +39,8 @@ class MenuResponse(BaseModel):
 # Menu Category Models
 class MenuCategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
-    image: Optional[str] = None
+    description: str | None = None
+    image: str | None = None
     isActive: bool = True
     displayOrder: int = Field(0, ge=0)
 
@@ -50,24 +50,24 @@ class MenuCategoryCreate(MenuCategoryBase):
 
 
 class MenuCategoryUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    image: Optional[str] = None
-    isActive: Optional[bool] = None
-    displayOrder: Optional[int] = Field(None, ge=0)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    image: str | None = None
+    isActive: bool | None = None
+    displayOrder: int | None = Field(None, ge=0)
 
 
 class MenuCategoryResponse(BaseModel):
     id: int
     menuId: int
     name: str
-    description: Optional[str]
-    image: Optional[str]
+    description: str | None
+    image: str | None
     isActive: bool
     displayOrder: int
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -77,8 +77,8 @@ class DishBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1)
     price: float = Field(..., gt=0)
-    image: Optional[str] = None
-    gallery: Optional[List[str]] = []
+    image: str | None = None
+    gallery: list[str] | None = []
     isAvailable: bool = True
     quantity: int = Field(..., ge=0)
     preparationTime: int = Field(..., ge=1, description="Preparation time in minutes")
@@ -91,16 +91,16 @@ class DishCreate(DishBase):
 
 
 class DishUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = Field(None, min_length=1)
-    price: Optional[float] = Field(None, gt=0)
-    image: Optional[str] = None
-    gallery: Optional[List[str]] = None
-    isAvailable: Optional[bool] = None
-    quantity: Optional[int] = Field(None, ge=0)
-    preparationTime: Optional[int] = Field(None, ge=1)
-    popularity: Optional[float] = Field(None, ge=0, le=5)
-    displayOrder: Optional[int] = Field(None, ge=0)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, min_length=1)
+    price: float | None = Field(None, gt=0)
+    image: str | None = None
+    gallery: list[str] | None = None
+    isAvailable: bool | None = None
+    quantity: int | None = Field(None, ge=0)
+    preparationTime: int | None = Field(None, ge=1)
+    popularity: float | None = Field(None, ge=0, le=5)
+    displayOrder: int | None = Field(None, ge=0)
 
 
 class DishResponse(BaseModel):
@@ -109,8 +109,8 @@ class DishResponse(BaseModel):
     name: str
     description: str
     price: float
-    image: Optional[str]
-    gallery: List[str]
+    image: str | None
+    gallery: list[str]
     isAvailable: bool
     quantity: int
     preparationTime: int
@@ -118,7 +118,7 @@ class DishResponse(BaseModel):
     displayOrder: int
     createdAt: datetime
     updatedAt: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -128,12 +128,12 @@ class DishListResponse(BaseModel):
     name: str
     description: str
     price: float
-    image: Optional[str]
+    image: str | None
     isAvailable: bool
     quantity: int
     preparationTime: int
     popularity: float
-    
+
     class Config:
         from_attributes = True
 
@@ -142,12 +142,12 @@ class DishListResponse(BaseModel):
 class MenuCategoryWithDishes(BaseModel):
     id: int
     name: str
-    description: Optional[str]
-    image: Optional[str]
+    description: str | None
+    image: str | None
     isActive: bool
     displayOrder: int
-    dishes: List[DishListResponse]
-    
+    dishes: list[DishListResponse]
+
     class Config:
         from_attributes = True
 
@@ -155,10 +155,10 @@ class MenuCategoryWithDishes(BaseModel):
 class MenuWithCategories(BaseModel):
     id: int
     name: str
-    description: Optional[str]
+    description: str | None
     isActive: bool
     displayOrder: int
-    categories: List[MenuCategoryWithDishes]
-    
+    categories: list[MenuCategoryWithDishes]
+
     class Config:
         from_attributes = True

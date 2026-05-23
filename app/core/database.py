@@ -1,18 +1,17 @@
 from collections.abc import AsyncGenerator
-from typing import Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    AsyncEngine,
+    create_async_engine,
 )
-from sqlalchemy import text
 
 from app.core.config import settings
 
-engine: Optional[AsyncEngine] = None
-async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+engine: AsyncEngine | None = None
+async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
 async def connect_db():
@@ -25,9 +24,7 @@ async def connect_db():
             pool_pre_ping=True,
             echo=False,
         )
-        async_session_maker = async_sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
 

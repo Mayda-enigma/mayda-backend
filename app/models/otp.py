@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 from enum import Enum
+
+from pydantic import BaseModel, Field
 
 
 class OtpPurpose(str, Enum):
@@ -29,8 +29,8 @@ class OtpVerifyRequest(BaseModel):
 class OtpVerifyResponse(BaseModel):
     success: bool
     message: str
-    accessToken: Optional[str] = None
-    user: Optional[dict] = None
+    accessToken: str | None = None
+    user: dict | None = None
 
 
 class PaymentOtpRequest(BaseModel):

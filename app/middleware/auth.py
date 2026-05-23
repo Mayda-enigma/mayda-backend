@@ -1,12 +1,11 @@
 from fastapi import HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from app.auth.jwt import verify_token, get_user_id_from_token
+
+from app.auth.jwt import get_user_id_from_token, verify_token
 from app.core.database import get_db
 from app.models.sqlalchemy_models import User
-
 
 security = HTTPBearer(auto_error=False)
 
@@ -15,7 +14,9 @@ class AuthMiddleware:
     """Middleware for JWT authentication."""
 
     @staticmethod
-    async def get_current_user_optional(credentials: Optional[HTTPAuthorizationCredentials] = None):
+    async def get_current_user_optional(
+        credentials: HTTPAuthorizationCredentials | None = None,
+    ):
         """Get current user from JWT token (optional - returns None if no token)."""
         if not credentials:
             return None
