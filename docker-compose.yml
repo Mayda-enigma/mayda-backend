@@ -38,6 +38,7 @@ services:
       - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
       - GUIDINI_APP_KEY=${GUIDINI_APP_KEY}
       - GUIDINI_API_KEY=${GUIDINI_API_KEY}
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
       - ENVIRONMENT=production
     depends_on:
       db:

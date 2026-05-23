@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python3 -m pip install --break-system-packages prisma==0.11.0
 
+RUN python3 -m nodeenv "$PRISMA_NODEENV_CACHE_DIR" --node=20.20.2 --prebuilt --force
+
 RUN python3 -m prisma generate --schema=./prisma/schema.prisma
 
 RUN python3 - <<'PY'
