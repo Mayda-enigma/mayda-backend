@@ -4,9 +4,10 @@ All endpoints require a valid JWT. PII is stripped; only the internal user ID
 is forwarded to downstream services via the shared SERVICE_TOKEN header.
 """
 
-from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException, Response
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.middleware.roles import get_current_user, get_current_staff_user, get_current_admin_user
 from app.models.ai import (
     RecommendRequest,
@@ -60,8 +61,10 @@ async def recommend(
     summary="Search for dishes/menus via natural language",
     description="Public endpoint (no auth required) to proxy search queries.",
 )
+@limiter.limit("20/minute", error_message="Too many AI search requests from this IP. Please slow down and try again soon.")
 async def search(
     request: Request,
+    response: Response,
     body: SearchRequest,
 ) -> SearchResponse:
     """Proxy POST /search to the search service."""
