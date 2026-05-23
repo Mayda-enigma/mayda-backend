@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List
 from app.models.table import (
-    TableCreate, TableUpdate, TableResponse, TableListResponse
+    CurrentOccupantInfo, TableCheckinResponse, TableCreate,
+    TableResponse, TableListResponse, TableStatus, TableUpdate
 )
 from app.core.database import get_db_session
 from app.middleware.roles import (
@@ -11,6 +12,16 @@ from app.middleware.roles import (
 
 
 router = APIRouter(prefix="/tables", tags=["Tables"])
+
+
+def build_current_occupant_info(session) -> CurrentOccupantInfo:
+    waiter_name = f"{session.waiter.firstName} {session.waiter.lastName}".strip() if session.waiter else "Unknown"
+    return CurrentOccupantInfo(
+        sessionId=session.id,
+        waiterId=session.waiterId,
+        waiterName=waiter_name,
+        startedAt=session.startedAt,
+    )
 
 
 @router.get("/restaurant/{restaurant_id}", response_model=List[TableListResponse])
@@ -105,6 +116,7 @@ async def create_table(
                 "number": table_data.number,
                 "capacity": table_data.capacity,
                 "isActive": table_data.isActive,
+                "status": table_data.status.value,
                 "qrCode": table_data.qrCode,
                 "nfcTag": table_data.nfcTag
             }
@@ -164,6 +176,9 @@ async def update_table(
     for field, value in table_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
+
+    if "status" in update_data:
+        update_data["status"] = update_data["status"].value
     
     if not update_data:
         raise HTTPException(
@@ -275,6 +290,82 @@ async def toggle_table_status(
         )
 
 
+@router.post("/{table_id}/checkin", response_model=TableCheckinResponse)
+async def check_in_table(
+    table_id: int,
+    current_user = Depends(get_current_staff_user),
+    db: "Prisma" = Depends(get_db_session),
+):
+    """Open a table session after a QR scan (Waiter/Manager/Admin only)."""
+
+    if current_user.role not in ["WAITER", "MANAGER", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Waiter access required"
+        )
+
+    table = await db.table.find_unique(where={"id": table_id})
+    if not table:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Table not found"
+        )
+
+    if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only check in tables from your own restaurant"
+        )
+
+    if not table.isActive:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive tables cannot be checked in"
+        )
+
+    active_session = await db.tablesession.find_first(
+        where={"tableId": table_id, "isActive": True},
+        include={
+            "waiter": {
+                "select": {
+                    "firstName": True,
+                    "lastName": True,
+                }
+            }
+        }
+    )
+
+    if table.status == TableStatus.OCCUPIED.value or active_session:
+        occupant_info = build_current_occupant_info(active_session) if active_session else None
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Table is already occupied",
+                "tableId": table.id,
+                "status": table.status,
+                "currentOccupant": occupant_info.model_dump() if occupant_info else None,
+            }
+        )
+
+    session = await db.tablesession.create(
+        data={
+            "tableId": table.id,
+            "waiterId": current_user.id,
+        }
+    )
+
+    updated_table = await db.table.update(
+        where={"id": table_id},
+        data={"status": TableStatus.OCCUPIED.value},
+    )
+
+    return TableCheckinResponse(
+        tableId=updated_table.id,
+        status=TableStatus(updated_table.status),
+        sessionId=session.id,
+    )
+
+
 @router.get("/{table_id}/current-orders")
 async def get_table_current_orders(
     table_id: int,
@@ -368,12 +459,14 @@ async def get_tables_availability(
     availability = []
     for table in tables:
         has_active_orders = len(table.orders) > 0
+        is_occupied = table.status == TableStatus.OCCUPIED.value or has_active_orders
         availability.append({
             "id": table.id,
             "number": table.number,
             "capacity": table.capacity,
+            "status": table.status,
             "qrCode": table.qrCode,
-            "isOccupied": has_active_orders,
+            "isOccupied": is_occupied,
             "activeOrders": len(table.orders)
         })
     
