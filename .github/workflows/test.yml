@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db?schema=public
+        run: python -m prisma generate
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db?schema=public
+          SERVICE_TOKEN: test-service-token
+          SECRET_KEY: test-secret-key
+        run: pytest
