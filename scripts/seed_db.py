@@ -236,9 +236,7 @@ async def main():
         for restaurant in restaurants:
             for staff_info in staff_data:
                 phone_counter += 1
-                email = (
-                    f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@mayda.dz"  # noqa: E501
-                )
+                email = f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@mayda.dz"  # noqa: E501
                 staff = await find_or_create_user(
                     db,
                     email,
