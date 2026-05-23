@@ -129,7 +129,7 @@ async def get_ingredients(
             # Count dishes using this ingredient
             dish_count = await db.dish.count(
                 where={
-                    "ingredients": {
+                    "ingredientLinks": {
                         "some": {
                             "ingredientId": ingredient.id
                         }
@@ -173,7 +173,7 @@ async def get_ingredient(
     # Count dishes using this ingredient
     dish_count = await db.dish.count(
         where={
-            "ingredients": {
+            "ingredientLinks": {
                 "some": {
                     "ingredientId": ingredient_id
                 }
@@ -252,7 +252,7 @@ async def update_ingredient(
         # Count dishes using this ingredient
         dish_count = await db.dish.count(
             where={
-                "ingredients": {
+                "ingredientLinks": {
                     "some": {
                         "ingredientId": ingredient_id
                     }
@@ -301,7 +301,7 @@ async def delete_ingredient(
     # Check if ingredient is used in any dishes
     dish_count = await db.dish.count(
         where={
-            "ingredients": {
+            "ingredientLinks": {
                 "some": {
                     "ingredientId": ingredient_id
                 }
@@ -393,26 +393,22 @@ async def add_ingredient_to_dish(
         )
     
     # Check if ingredient is already added to this dish
-    existing_relation = await db.dish.find_first(
+    existing_relation = await db.dishingredientlink.find_first(
         where={
-            "id": dish_ingredient_data.dishId,
-            "ingredients": {
-                "some": {
-                    "ingredientId": dish_ingredient_data.ingredientId
-                }
-            }
+            "dishId": dish_ingredient_data.dishId,
+            "ingredientId": dish_ingredient_data.ingredientId
         }
     )
-    
+
     if existing_relation:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Ingredient '{ingredient.name}' is already added to this dish"
         )
-    
+
     try:
         # Create dish-ingredient relation
-        dish_ingredient = await db.ingredient.create(
+        dish_ingredient = await db.dishingredientlink.create(
             data={
                 "dishId": dish_ingredient_data.dishId,
                 "ingredientId": dish_ingredient_data.ingredientId,
@@ -435,7 +431,7 @@ async def add_ingredient_to_dish(
                 }
             }
         )
-        
+
         return DishIngredientResponse.model_validate(dish_ingredient)
         
     except Exception as e:
@@ -457,7 +453,7 @@ async def get_dish_ingredients(
     dish = await db.dish.find_unique(
         where={"id": dish_id},
         include={
-            "ingredients": {
+            "ingredientLinks": {
                 "include": {
                     "ingredient": True
                 }
@@ -498,7 +494,7 @@ async def get_dish_ingredients(
     is_gluten_free = True
     is_dairy_free = True
     
-    for dish_ingredient in dish.ingredients:
+    for dish_ingredient in dish.ingredientLinks:
         ingredient = dish_ingredient.ingredient
         
         # Add to response
@@ -553,7 +549,7 @@ async def update_dish_ingredient(
         )
     
     # Get dish ingredient relation
-    dish_ingredient = await db.ingredient.find_unique(
+    dish_ingredient = await db.dishingredientlink.find_unique(
         where={"id": dish_ingredient_id},
         include={
             "dish": {
@@ -571,13 +567,13 @@ async def update_dish_ingredient(
             }
         }
     )
-    
+
     if not dish_ingredient:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish ingredient relation not found"
         )
-    
+
     # Check if user can manage this restaurant's dishes
     restaurant_id = dish_ingredient.dish.category.menu.restaurant.id
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -585,22 +581,22 @@ async def update_dish_ingredient(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update ingredients for dishes in your own restaurant"
         )
-    
+
     # Prepare update data
     update_fields = {}
     for field, value in update_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_fields[field] = value
-    
+
     if not update_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update"
         )
-    
+
     try:
         # Update dish ingredient relation
-        updated_relation = await db.ingredient.update(
+        updated_relation = await db.dishingredientlink.update(
             where={"id": dish_ingredient_id},
             data=update_fields,
             include={
@@ -617,7 +613,7 @@ async def update_dish_ingredient(
                 }
             }
         )
-        
+
         return DishIngredientResponse.model_validate(updated_relation)
         
     except Exception as e:
@@ -643,7 +639,7 @@ async def remove_ingredient_from_dish(
         )
     
     # Get dish ingredient relation
-    dish_ingredient = await db.ingredient.find_unique(
+    dish_ingredient = await db.dishingredientlink.find_unique(
         where={"id": dish_ingredient_id},
         include={
             "dish": {
@@ -662,13 +658,13 @@ async def remove_ingredient_from_dish(
             "ingredient": True
         }
     )
-    
+
     if not dish_ingredient:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish ingredient relation not found"
         )
-    
+
     # Check if user can manage this restaurant's dishes
     restaurant_id = dish_ingredient.dish.category.menu.restaurant.id
     if current_user.role != "ADMIN" and current_user.restaurantId != restaurant_id:
@@ -676,13 +672,13 @@ async def remove_ingredient_from_dish(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only remove ingredients from dishes in your own restaurant"
         )
-    
+
     try:
         # Delete dish ingredient relation
-        await db.ingredient.delete(
+        await db.dishingredientlink.delete(
             where={"id": dish_ingredient_id}
         )
-        
+
         return {
             "message": f"Ingredient '{dish_ingredient.ingredient.name}' removed from dish '{dish_ingredient.dish.name}'"
         }
@@ -722,7 +718,7 @@ async def get_ingredient_stats(
         for ingredient in active_ingredients:
             dish_count = await db.dish.count(
                 where={
-                    "ingredients": {
+                    "ingredientLinks": {
                         "some": {
                             "ingredientId": ingredient.id
                         }

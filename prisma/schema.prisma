@@ -148,7 +148,8 @@ model Dish {
   displayOrder Int     @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  ingredients ingredient[]
+  dishIngredients DishIngredient[]
+  ingredientLinks DishIngredientLink[]
   orderItems   OrderItem[]
   reviews      Review[]
   promotions   Promotion[] @relation("PromotionDishes")
@@ -362,30 +363,67 @@ model Inventory {
   id           Int @id @default(autoincrement())
   restaurantId Int
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
-  itemName     String
+  name         String
   description  String?
-  unit         String     
+  category     String
+  unit         String
   currentStock Float
-  minStock     Float      
-  maxStock     Float?     
-  unitCost     Float?     
+  minimumStock Float
+  maxStock     Float?
+  unitPrice    Float      @default(0)
   supplier     String?
   supplierContact String?
+  location     String?
+  expiryDate   DateTime?
   lastRestocked DateTime?
+  isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  relatedingredients ingredient[]
-  @@unique([restaurantId, itemName])
+  dishIngredients DishIngredient[]
+  @@unique([restaurantId, name])
   @@map("inventory")
 }
 
-model ingredient {
-  id Int @id @default(autoincrement())
-  dishId Int
-  dish Dish @relation(fields: [dishId] , references: [id])
-  InventoryId Int
-  Inventoryrel Inventory @relation(fields: [InventoryId] , references: [id])
-  quantity Float
+model Ingredient {
+  id             Int      @id @default(autoincrement())
+  name           String
+  description    String?
+  allergenInfo   String?
+  category       String
+  isVegetarian   Boolean  @default(false)
+  isVegan        Boolean  @default(false)
+  isGlutenFree   Boolean  @default(false)
+  isDairyFree    Boolean  @default(false)
+  nutritionalInfo Json?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  dishIngredients DishIngredientLink[]
+  @@map("ingredients")
+}
+
+model DishIngredient {
+  id          Int       @id @default(autoincrement())
+  dishId      Int
+  dish        Dish      @relation(fields: [dishId], references: [id])
+  inventoryId Int
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  quantity    Float
+  @@map("dish_inventory")
+}
+
+model DishIngredientLink {
+  id           Int        @id @default(autoincrement())
+  dishId       Int
+  dish         Dish       @relation(fields: [dishId], references: [id])
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  quantity     String?
+  isOptional   Boolean    @default(false)
+  isVisible    Boolean    @default(true)
+  notes        String?
+  @@unique([dishId, ingredientId])
+  @@map("dish_ingredients")
 }
 
 

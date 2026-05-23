@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     InventoryStockUpdate, InventoryStockUpdateResponse, InventoryStatsResponse,
@@ -83,13 +83,6 @@ async def create_inventory_item(
                 "supplier": item_data.supplier,
                 "location": item_data.location,
                 "expiryDate": item_data.expiryDate
-            },
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
             }
         )
         
@@ -147,22 +140,15 @@ async def get_inventory_items(
     
     # Handle expiring soon filter
     if expiring_soon:
-        expiry_threshold = datetime.now() + timedelta(days=7)
+        expiry_threshold = datetime.now(timezone.utc) + timedelta(days=7)
         where_clause["expiryDate"] = {
             "lte": expiry_threshold,
-            "gte": datetime.now()
+            "gte": datetime.now(timezone.utc)
         }
     
     try:
         inventory_items = await db.inventory.find_many(
             where=where_clause,
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
-            },
             skip=skip,
             take=limit,
             order={"name": "asc"}
@@ -200,14 +186,7 @@ async def get_inventory_item(
     
     # Get inventory item
     inventory_item = await db.inventory.find_unique(
-        where={"id": item_id},
-        include={
-            "restaurant": {
-                "select": {
-                    "name": True
-                }
-            }
-        }
+        where={"id": item_id}
     )
     
     if not inventory_item:
@@ -281,14 +260,7 @@ async def update_inventory_item(
         # Update inventory item
         updated_item = await db.inventory.update(
             where={"id": item_id},
-            data=update_data,
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
-            }
+            data=update_data
         )
         
         # Format response
@@ -447,7 +419,17 @@ async def get_low_stock_alerts(
         alerts = []
         for item in low_stock_items:
             if item.currentStock <= item.minimumStock:
-                alerts.append(InventoryLowStockAlert.model_validate(item))
+                alerts.append(InventoryLowStockAlert(
+                    id=item.id,
+                    name=item.name,
+                    category=item.category,
+                    currentStock=item.currentStock,
+                    minimumStock=item.minimumStock,
+                    unit=item.unit,
+                    supplier=item.supplier,
+                    location=item.location,
+                    expiryDate=item.expiryDate,
+                ))
         
         return alerts
         
@@ -496,10 +478,10 @@ async def get_inventory_stats(
         low_stock_items = [item for item in active_items if item.currentStock <= item.minimumStock]
         
         # Items expiring in next 7 days
-        expiry_threshold = datetime.now() + timedelta(days=7)
+        expiry_threshold = datetime.now(timezone.utc) + timedelta(days=7)
         expiring_soon_items = [
             item for item in active_items 
-            if item.expiryDate and item.expiryDate <= expiry_threshold and item.expiryDate >= datetime.now()
+            if item.expiryDate and item.expiryDate <= expiry_threshold and item.expiryDate >= datetime.now(timezone.utc)
         ]
         
         # Calculate total value
