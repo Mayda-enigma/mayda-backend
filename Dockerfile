@@ -4,7 +4,12 @@ FROM python:3.12-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    HOME=/home/appuser \
+    XDG_CACHE_HOME=/home/appuser/.cache \
+    PRISMA_HOME_DIR=/home/appuser/.prisma \
+    PRISMA_BINARY_CACHE_DIR=/home/appuser/.cache/prisma-python/binaries \
+    PRISMA_NODEENV_CACHE_DIR=/home/appuser/.cache/prisma-python/nodeenv
 
 # Set work directory
 WORKDIR /app
@@ -37,11 +42,15 @@ RUN prisma generate
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --gid 1001 --no-create-home appuser
+    && adduser --system --uid 1001 --gid 1001 --home /home/appuser appuser
 
 # Change ownership of app directory
 RUN chown -R appuser:appgroup /app
 
+RUN mkdir -p /home/appuser/.cache/prisma-python/binaries \
+    /home/appuser/.cache/prisma-python/nodeenv \
+    /home/appuser/.prisma \
+    && chown -R appuser:appgroup /home/appuser /app
 # Switch to non-root user
 USER appuser
 
