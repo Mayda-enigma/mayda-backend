@@ -6,8 +6,8 @@ import httpx
 import pytest
 import respx
 
-from tests.conftest import _mock_result
 from app.core.config import settings
+from tests.conftest import _mock_result
 
 RECOMMEND_URL = f"{settings.RECOMMENDATION_SERVICE_URL.rstrip('/')}/recommendations"
 
