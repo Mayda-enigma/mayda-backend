@@ -152,6 +152,120 @@ async def get_ingredients(
         )
 
 
+@router.get("/stats", response_model=IngredientStatsResponse)
+async def get_ingredient_stats(
+    current_user = Depends(get_current_staff_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get ingredient statistics (Staff only)."""
+
+    try:
+        # Get all ingredients
+        stmt = select(Ingredient)
+        all_ingredients = (await db.execute(stmt)).scalars().all()
+        active_ingredients = [ing for ing in all_ingredients if ing.isActive]
+
+        # Count dietary types
+        vegetarian_count = len([ing for ing in active_ingredients if ing.isVegetarian])
+        vegan_count = len([ing for ing in active_ingredients if ing.isVegan])
+        gluten_free_count = len([ing for ing in active_ingredients if ing.isGlutenFree])
+        dairy_free_count = len([ing for ing in active_ingredients if ing.isDairyFree])
+
+        # Count unique categories
+        categories = set(ing.category for ing in active_ingredients if ing.category)
+
+        # Get most used ingredients
+        most_used = []
+        for ingredient in active_ingredients:
+            count_stmt = select(func.count(Dish.id)).where(
+                Dish.ingredients.any(DishIngredient.ingredientId == ingredient.id)
+            )
+            dish_count = (await db.execute(count_stmt)).scalar()
+
+            if dish_count > 0:
+                most_used.append({
+                    "id": ingredient.id,
+                    "name": ingredient.name,
+                    "category": ingredient.category,
+                    "dishCount": dish_count
+                })
+
+        # Sort by usage and take top 10
+        most_used.sort(key=lambda x: x["dishCount"], reverse=True)
+        most_used = most_used[:10]
+
+        return IngredientStatsResponse(
+            totalIngredients=len(all_ingredients),
+            activeIngredients=len(active_ingredients),
+            categoriesCount=len(categories),
+            vegetarianCount=vegetarian_count,
+            veganCount=vegan_count,
+            glutenFreeCount=gluten_free_count,
+            dairyFreeCount=dairy_free_count,
+            mostUsedIngredients=most_used
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error calculating ingredient stats: {str(e)}"
+        )
+
+
+@router.get("/categories", response_model=List[IngredientCategoryResponse])
+async def get_ingredient_categories(
+    current_user = Depends(get_current_staff_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get ingredient breakdown by category (Staff only)."""
+
+    try:
+        # Get all active ingredients
+        stmt = select(Ingredient).where(Ingredient.isActive == True)
+        ingredients = (await db.execute(stmt)).scalars().all()
+
+        # Group by category
+        category_data = {}
+        for ingredient in ingredients:
+            category = ingredient.category or "Uncategorized"
+
+            if category not in category_data:
+                category_data[category] = {
+                    "category": category,
+                    "ingredientCount": 0,
+                    "vegetarianCount": 0,
+                    "veganCount": 0,
+                    "glutenFreeCount": 0,
+                    "dairyFreeCount": 0
+                }
+
+            data = category_data[category]
+            data["ingredientCount"] += 1
+
+            if ingredient.isVegetarian:
+                data["vegetarianCount"] += 1
+            if ingredient.isVegan:
+                data["veganCount"] += 1
+            if ingredient.isGlutenFree:
+                data["glutenFreeCount"] += 1
+            if ingredient.isDairyFree:
+                data["dairyFreeCount"] += 1
+
+        # Convert to response format
+        result = [
+            IngredientCategoryResponse.model_validate(data)
+            for data in category_data.values()
+        ]
+
+        return sorted(result, key=lambda x: x.ingredientCount, reverse=True)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error fetching category breakdown: {str(e)}"
+        )
+
+
 @router.get("/{ingredient_id}", response_model=IngredientResponse)
 async def get_ingredient(
     ingredient_id: int,
@@ -633,116 +747,5 @@ async def remove_ingredient_from_dish(
 
 
 # ==================== ANALYTICS & REPORTING ====================
-
-@router.get("/stats", response_model=IngredientStatsResponse)
-async def get_ingredient_stats(
-    current_user = Depends(get_current_staff_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get ingredient statistics (Staff only)."""
-
-    try:
-        # Get all ingredients
-        stmt = select(Ingredient)
-        all_ingredients = (await db.execute(stmt)).scalars().all()
-        active_ingredients = [ing for ing in all_ingredients if ing.isActive]
-
-        # Count dietary types
-        vegetarian_count = len([ing for ing in active_ingredients if ing.isVegetarian])
-        vegan_count = len([ing for ing in active_ingredients if ing.isVegan])
-        gluten_free_count = len([ing for ing in active_ingredients if ing.isGlutenFree])
-        dairy_free_count = len([ing for ing in active_ingredients if ing.isDairyFree])
-
-        # Count unique categories
-        categories = set(ing.category for ing in active_ingredients if ing.category)
-
-        # Get most used ingredients
-        most_used = []
-        for ingredient in active_ingredients:
-            count_stmt = select(func.count(Dish.id)).where(
-                Dish.ingredients.any(DishIngredient.ingredientId == ingredient.id)
-            )
-            dish_count = (await db.execute(count_stmt)).scalar()
-
-            if dish_count > 0:
-                most_used.append({
-                    "id": ingredient.id,
-                    "name": ingredient.name,
-                    "category": ingredient.category,
-                    "dishCount": dish_count
-                })
-
-        # Sort by usage and take top 10
-        most_used.sort(key=lambda x: x["dishCount"], reverse=True)
-        most_used = most_used[:10]
-
-        return IngredientStatsResponse(
-            totalIngredients=len(all_ingredients),
-            activeIngredients=len(active_ingredients),
-            categoriesCount=len(categories),
-            vegetarianCount=vegetarian_count,
-            veganCount=vegan_count,
-            glutenFreeCount=gluten_free_count,
-            dairyFreeCount=dairy_free_count,
-            mostUsedIngredients=most_used
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error calculating ingredient stats: {str(e)}"
-        )
-
-
-@router.get("/categories", response_model=List[IngredientCategoryResponse])
-async def get_ingredient_categories(
-    current_user = Depends(get_current_staff_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get ingredient breakdown by category (Staff only)."""
-
-    try:
-        # Get all active ingredients
-        stmt = select(Ingredient).where(Ingredient.isActive == True)
-        ingredients = (await db.execute(stmt)).scalars().all()
-
-        # Group by category
-        category_data = {}
-        for ingredient in ingredients:
-            category = ingredient.category or "Uncategorized"
-
-            if category not in category_data:
-                category_data[category] = {
-                    "category": category,
-                    "ingredientCount": 0,
-                    "vegetarianCount": 0,
-                    "veganCount": 0,
-                    "glutenFreeCount": 0,
-                    "dairyFreeCount": 0
-                }
-
-            data = category_data[category]
-            data["ingredientCount"] += 1
-
-            if ingredient.isVegetarian:
-                data["vegetarianCount"] += 1
-            if ingredient.isVegan:
-                data["veganCount"] += 1
-            if ingredient.isGlutenFree:
-                data["glutenFreeCount"] += 1
-            if ingredient.isDairyFree:
-                data["dairyFreeCount"] += 1
-
-        # Convert to response format
-        result = [
-            IngredientCategoryResponse.model_validate(data)
-            for data in category_data.values()
-        ]
-
-        return sorted(result, key=lambda x: x.ingredientCount, reverse=True)
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error fetching category breakdown: {str(e)}"
-        )
+# Note: /stats and /categories endpoints are defined before /{ingredient_id}
+# to avoid route conflicts

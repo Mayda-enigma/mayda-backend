@@ -299,6 +299,8 @@ async def get_payment_receipt(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Payment gateway connection error: {str(e)}"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -368,65 +370,12 @@ async def show_payment_status(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Payment gateway connection error: {str(e)}"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve payment status: {str(e)}"
-        )
-
-
-@router.get("/{payment_id}", response_model=PaymentResponse)
-async def get_payment(
-    payment_id: int,
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Get payment details by ID."""
-
-    try:
-        payment = (
-            await db.execute(
-                select(Payments)
-                .where(Payments.id == payment_id)
-                .options(
-                    selectinload(Payments.order).selectinload(Order.user),
-                    selectinload(Payments.order).selectinload(Order.restaurant),
-                )
-            )
-        ).scalar_one_or_none()
-
-        if not payment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Payment not found"
-            )
-
-        # Check if user owns the payment (unless they're staff)
-        if current_user.role == "CLIENT" and payment.order.userId != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view your own payments"
-            )
-
-        return PaymentResponse(
-            id=payment.id,
-            paymentId=payment.paymentId,
-            orderId=payment.orderId,
-            order={
-                "orderNumber": payment.order.orderNumber,
-                "totalAmount": payment.order.totalAmount,
-                "paymentStatus": payment.order.paymentStatus,
-                "restaurant": {
-                    "name": payment.order.restaurant.name
-                }
-            },
-            createdAt=payment.createdAt
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve payment: {str(e)}"
         )
 
 
@@ -684,4 +633,59 @@ async def update_payment_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update payment status: {str(e)}"
+        )
+
+
+@router.get("/{payment_id}", response_model=PaymentResponse)
+async def get_payment(
+    payment_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Get payment details by ID."""
+
+    try:
+        payment = (
+            await db.execute(
+                select(Payments)
+                .where(Payments.id == payment_id)
+                .options(
+                    selectinload(Payments.order).selectinload(Order.user),
+                    selectinload(Payments.order).selectinload(Order.restaurant),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not payment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Payment not found"
+            )
+
+        # Check if user owns the payment (unless they're staff)
+        if current_user.role == "CLIENT" and payment.order.userId != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own payments"
+            )
+
+        return PaymentResponse(
+            id=payment.id,
+            paymentId=payment.paymentId,
+            orderId=payment.orderId,
+            order={
+                "orderNumber": payment.order.orderNumber,
+                "totalAmount": payment.order.totalAmount,
+                "paymentStatus": payment.order.paymentStatus,
+                "restaurant": {
+                    "name": payment.order.restaurant.name
+                }
+            },
+            createdAt=payment.createdAt
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve payment: {str(e)}"
         )

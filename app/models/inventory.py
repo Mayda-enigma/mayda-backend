@@ -100,6 +100,9 @@ class InventoryLowStockAlert(BaseModel):
     location: Optional[str] = None
     expiryDate: Optional[datetime] = None
 
+    class Config:
+        from_attributes = True
+
 
 class InventorySearchFilters(BaseModel):
     category: Optional[str] = None
