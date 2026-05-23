@@ -424,6 +424,8 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
 model PlatformSettings {
   id                    Int      @id @default(1)
   currency              String   @default("USD")
