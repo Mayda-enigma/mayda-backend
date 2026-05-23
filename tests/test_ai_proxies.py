@@ -7,8 +7,9 @@ import pytest
 import respx
 
 from tests.conftest import _mock_result
+from app.core.config import settings
 
-RECOMMEND_URL = "http://recommendation:8101/recommendations"
+RECOMMEND_URL = f"{settings.RECOMMENDATION_SERVICE_URL.rstrip('/')}/recommendations"
 
 
 @pytest.mark.asyncio

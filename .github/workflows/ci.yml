@@ -53,6 +53,8 @@ jobs:
       SERVICE_TOKEN: ci-service-token
       SECRET_KEY: ci-secret-key-32-chars-minimum-ok
       ENVIRONMENT: test
+      GUIDINI_APP_KEY: test-key
+      GUIDINI_API_KEY: test-secret
 
     steps:
       - uses: actions/checkout@v4
