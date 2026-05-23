@@ -10,6 +10,7 @@ from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user, get_current_user_optional
 )
+from app.routes.notifications import create_restaurant_event_notifications
 
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
@@ -228,6 +229,21 @@ async def create_public_reservation(
                 }
             }
         )
+
+        await create_restaurant_event_notifications(
+            db=db,
+            restaurant_id=reservation.restaurantId,
+            notification_type="reservation",
+            title="New reservation created",
+            body=f"Reservation #{reservation.id} was created for {restaurant.name}.",
+            metadata={
+                "reservationId": reservation.id,
+                "restaurantId": reservation.restaurantId,
+                "tableId": reservation.tableId,
+                "reservationStart": reservation.reservationStart.isoformat(),
+                "reservationEnd": reservation.reservationEnd.isoformat(),
+            },
+        )
         
         return ReservationResponse.model_validate(complete_reservation)
         
@@ -335,6 +351,22 @@ async def create_reservation(
                     }
                 }
             }
+        )
+
+        await create_restaurant_event_notifications(
+            db=db,
+            restaurant_id=reservation.restaurantId,
+            notification_type="reservation",
+            title="New reservation created",
+            body=f"Reservation #{reservation.id} was created for {restaurant.name}.",
+            metadata={
+                "reservationId": reservation.id,
+                "restaurantId": reservation.restaurantId,
+                "tableId": reservation.tableId,
+                "userId": current_user.id,
+                "reservationStart": reservation.reservationStart.isoformat(),
+                "reservationEnd": reservation.reservationEnd.isoformat(),
+            },
         )
         
         return ReservationResponse.model_validate(complete_reservation)

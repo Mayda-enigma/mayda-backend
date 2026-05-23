@@ -10,6 +10,7 @@ from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
+from app.routes.notifications import create_restaurant_event_notifications
 
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -182,6 +183,20 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
                 }
             }
         )
+
+        await create_restaurant_event_notifications(
+            db=db,
+            restaurant_id=order.restaurantId,
+            notification_type="order_placed",
+            title="New order placed",
+            body=f"Order {order.orderNumber} was placed for {restaurant.name}.",
+            metadata={
+                "orderId": order.id,
+                "orderNumber": order.orderNumber,
+                "restaurantId": order.restaurantId,
+                "totalAmount": total_amount,
+            },
+        )
         
         return OrderResponse.model_validate(complete_order)
         
@@ -351,6 +366,21 @@ async def create_order(
                     }
                 }
                     }
+        )
+
+        await create_restaurant_event_notifications(
+            db=db,
+            restaurant_id=order.restaurantId,
+            notification_type="order_placed",
+            title="New order placed",
+            body=f"Order {order.orderNumber} was placed for {restaurant.name}.",
+            metadata={
+                "orderId": order.id,
+                "orderNumber": order.orderNumber,
+                "restaurantId": order.restaurantId,
+                "userId": current_user.id,
+                "totalAmount": total_amount,
+            },
         )
         
         return OrderResponse.model_validate(complete_order)
