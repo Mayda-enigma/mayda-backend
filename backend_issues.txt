@@ -1,0 +1,29 @@
+29	OPEN	BE-029: Convert Dockerfile to multi-stage build		2026-05-22T14:47:58Z
+28	CLOSED	BE-028: Set up `pytest` + smoke tests for critical paths		2026-05-23T05:16:55Z
+27	OPEN	BE-027: Add rate limiting with `slowapi`		2026-05-22T14:47:55Z
+26	CLOSED	BE-026: Add structured logging with `loguru` (replace all 55 `print()` calls)		2026-05-22T23:47:34Z
+25	CLOSED	BE-025: Fix JWT subject typing + `datetime.utcnow()` deprecation		2026-05-22T23:34:49Z
+24	CLOSED	BE-024: Delete decorator-based RBAC; keep only FastAPI dependencies		2026-05-22T23:34:37Z
+23	OPEN	BE-023: Consolidate 3 SMS files into 1		2026-05-22T14:47:50Z
+22	CLOSED	BE-022: Switch auth to non-debug SMS service + verify flow		2026-05-23T02:40:59Z
+21	CLOSED	BE-021: Add `POST /users/me/push-token` endpoint		2026-05-23T02:40:59Z
+20	CLOSED	BE-020: Add `POST /tables/{id}/checkin` endpoint		2026-05-23T02:40:58Z
+19	CLOSED	BE-019: Add notifications endpoints — `GET /notifications`, `PATCH /notifications/{id}/read`		2026-05-23T02:40:58Z
+18	CLOSED	BE-018: Add staff CRUD nested under `/restaurants/{id}/staff`		2026-05-23T02:40:58Z
+17	CLOSED	BE-017: Add admin endpoints — `/admin/stats`, `/admin/analytics`, `/admin/settings`		2026-05-23T02:03:40Z
+16	CLOSED	BE-016: Add analytics endpoints — `/analytics/restaurant` + `/analytics/kitchen`		2026-05-23T02:40:57Z
+15	CLOSED	BE-015: Move hardcoded admin seed out of startup into a CLI command		2026-05-23T01:24:03Z
+14	CLOSED	BE-014: Convert `get_db()` to FastAPI dependency		2026-05-22T21:50:33Z
+13	CLOSED	BE-013: Migrate `@app.on_event` to `lifespan` context manager		2026-05-22T20:56:07Z
+12	CLOSED	BE-012: Add request ID middleware for tracing		2026-05-22T20:51:58Z
+11	CLOSED	BE-011: Replace hardcoded CORS with env-driven regex		2026-05-22T20:28:07Z
+10	OPEN	BE-010: Remove default `SECRET_KEY` + enforce env-var presence		2026-05-22T14:47:31Z
+9	CLOSED	BE-009: Add `/ai/anomalies` GET + ack endpoints		2026-05-22T20:03:07Z
+8	CLOSED	BE-008: Add `POST /ai/voice/transcribe` proxy → voice-chef (multipart)		2026-05-22T19:45:57Z
+7	CLOSED	BE-007: Add `POST /ai/inventory/forecast` proxy → inventory service		2026-05-22T19:31:57Z
+6	CLOSED	BE-006: Add `POST /ai/search` proxy → search-llm service		2026-05-22T19:19:38Z
+5	CLOSED	BE-005: Add `POST /ai/recommend` proxy → recommendation service		2026-05-22T19:09:23Z
+4	CLOSED	BE-004: Add AI service configuration + `httpx` + proxy infrastructure		2026-05-22T19:02:55Z
+3	CLOSED	BE-003: Migrate backend port from 8000 → 8001 across all configs		2026-05-22T18:33:44Z
+2	CLOSED	BE-002: Register the 3 missing routers (`loyalty`, `ingredients`, `inventory`)		2026-05-22T18:03:16Z
+1	CLOSED	BE-001: Initialize `mayda-backend` repo from `API_Orchestration/`		2026-05-22T16:13:14Z

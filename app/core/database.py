@@ -1,33 +1,53 @@
-from prisma import Prisma
+from collections.abc import AsyncGenerator
 from typing import Optional
 
-# Global database connection
-db: Optional[Prisma] = None
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncSession,
+    async_sessionmaker,
+    AsyncEngine,
+)
+from sqlalchemy import text
+
+from app.core.config import settings
+
+engine: Optional[AsyncEngine] = None
+async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
 
 
 async def connect_db():
-    """Connect to the database."""
-    global db
-    if db is None:
-        db = Prisma()
-        await db.connect()
+    global engine, async_session_maker
+    if engine is None:
+        engine = create_async_engine(
+            settings.async_database_url,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,
+            echo=False,
+        )
+        async_session_maker = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
 
 
 async def disconnect_db():
-    """Disconnect from the database."""
-    global db
-    if db is not None:
-        await db.disconnect()
+    global engine, async_session_maker
+    if engine is not None:
+        await engine.dispose()
+        engine = None
+        async_session_maker = None
 
 
-def get_db() -> Prisma:
-    """Get the database connection."""
-    global db
-    if db is None:
+async def get_db() -> AsyncSession:
+    if async_session_maker is None:
         raise RuntimeError("Database not connected. Call connect_db() first.")
-    return db
+    return async_session_maker()
 
 
-async def get_db_session():
-    """FastAPI dependency that yields the shared Prisma client."""
-    yield get_db()
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    if async_session_maker is None:
+        raise RuntimeError("Database not connected. Call connect_db() first.")
+    async with async_session_maker() as session:
+        yield session

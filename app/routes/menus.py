@@ -10,6 +10,10 @@ from app.middleware.roles import (
     get_current_manager_or_admin, get_current_staff_user,
     get_current_user_optional
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, or_, and_
+from sqlalchemy.orm import selectinload
+from app.models.sqlalchemy_models import Menu, MenuCategory, Dish, Restaurant
 
 
 router = APIRouter(prefix="/menus", tags=["Menus & Dishes"])
@@ -22,39 +26,32 @@ async def get_restaurant_menus(
     restaurant_id: int,
     active_only: bool = Query(True),
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get all menus for a restaurant with categories and dishes (public endpoint)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": restaurant_id})
+
+    restaurant = await db.get(Restaurant, restaurant_id)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    where_clause = {"restaurantId": restaurant_id}
+
+    stmt = select(Menu).where(Menu.restaurantId == restaurant_id)
     if active_only:
-        where_clause["isActive"] = True
-    
-    menus = await db.menu.find_many(
-        where=where_clause,
-        include={
-            "categories": {
-                "where": {"isActive": True} if active_only else {},
-                "include": {
-                    "dishes": {
-                        "where": {"isAvailable": True} if active_only else {},
-                        "orderBy": {"displayOrder": "asc"}
-                    }
-                },
-                "orderBy": {"displayOrder": "asc"}
-            }
-        },
-        order={"displayOrder": "asc"}
-    )
-    
+        stmt = stmt.where(Menu.isActive == True)
+    stmt = stmt.options(
+        selectinload(Menu.categories).selectinload(MenuCategory.dishes)
+    ).order_by(Menu.displayOrder)
+
+    menus = (await db.execute(stmt)).scalars().all()
+
+    if active_only:
+        for menu in menus:
+            menu.categories = [c for c in menu.categories if c.isActive]
+            for cat in menu.categories:
+                cat.dishes = [d for d in cat.dishes if d.isAvailable]
+
     return [MenuWithCategories.model_validate(menu) for menu in menus]
 
 
@@ -62,38 +59,37 @@ async def get_restaurant_menus(
 async def create_menu(
     menu_data: MenuCreate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new menu (Manager/Admin only)."""
-    
-    # Check if restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": menu_data.restaurantId})
+
+    restaurant = await db.get(Restaurant, menu_data.restaurantId)
     if not restaurant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Restaurant not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != menu_data.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create menus for your own restaurant"
         )
-    
+
     try:
-        menu = await db.menu.create(
-            data={
-                "restaurantId": menu_data.restaurantId,
-                "name": menu_data.name,
-                "description": menu_data.description,
-                "isActive": menu_data.isActive,
-                "displayOrder": menu_data.displayOrder
-            }
+        menu = Menu(
+            restaurantId=menu_data.restaurantId,
+            name=menu_data.name,
+            description=menu_data.description,
+            isActive=menu_data.isActive,
+            displayOrder=menu_data.displayOrder
         )
-        
+        db.add(menu)
+        await db.commit()
+        await db.refresh(menu)
+
         return MenuResponse.model_validate(menu)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -106,48 +102,43 @@ async def update_menu(
     menu_id: int,
     menu_data: MenuUpdate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update menu (Manager/Admin only)."""
-    
-    # Check if menu exists
-    menu = await db.menu.find_unique(
-        where={"id": menu_id},
-        include={"restaurant": True}
-    )
+
+    stmt = select(Menu).where(Menu.id == menu_id).options(selectinload(Menu.restaurant))
+    menu = (await db.execute(stmt)).scalar_one_or_none()
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update menus for your own restaurant"
         )
-    
-    # Prepare update data
+
     update_data = {}
     for field, value in menu_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
-    
+
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
-    
+
     try:
-        updated_menu = await db.menu.update(
-            where={"id": menu_id},
-            data=update_data
-        )
-        
-        return MenuResponse.model_validate(updated_menu)
-        
+        for field, value in update_data.items():
+            setattr(menu, field, value)
+        await db.commit()
+        await db.refresh(menu)
+
+        return MenuResponse.model_validate(menu)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -159,32 +150,29 @@ async def update_menu(
 async def delete_menu(
     menu_id: int,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete menu (Manager/Admin only)."""
-    
-    # Check if menu exists
-    menu = await db.menu.find_unique(
-        where={"id": menu_id},
-        include={"restaurant": True}
-    )
+
+    stmt = select(Menu).where(Menu.id == menu_id).options(selectinload(Menu.restaurant))
+    menu = (await db.execute(stmt)).scalar_one_or_none()
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete menus for your own restaurant"
         )
-    
+
     try:
-        await db.menu.delete(where={"id": menu_id})
+        await db.delete(menu)
+        await db.commit()
         return {"message": f"Menu '{menu.name}' deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -198,42 +186,39 @@ async def delete_menu(
 async def create_menu_category(
     category_data: MenuCategoryCreate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new menu category (Manager/Admin only)."""
-    
-    # Check if menu exists and get restaurant info
-    menu = await db.menu.find_unique(
-        where={"id": category_data.menuId},
-        include={"restaurant": True}
-    )
+
+    stmt = select(Menu).where(Menu.id == category_data.menuId).options(selectinload(Menu.restaurant))
+    menu = (await db.execute(stmt)).scalar_one_or_none()
     if not menu:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create categories for your own restaurant's menus"
         )
-    
+
     try:
-        category = await db.menucategory.create(
-            data={
-                "menuId": category_data.menuId,
-                "name": category_data.name,
-                "description": category_data.description,
-                "image": category_data.image,
-                "isActive": category_data.isActive,
-                "displayOrder": category_data.displayOrder
-            }
+        category = MenuCategory(
+            menuId=category_data.menuId,
+            name=category_data.name,
+            description=category_data.description,
+            image=category_data.image,
+            isActive=category_data.isActive,
+            displayOrder=category_data.displayOrder
         )
-        
+        db.add(category)
+        await db.commit()
+        await db.refresh(category)
+
         return MenuCategoryResponse.model_validate(category)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -246,48 +231,47 @@ async def update_menu_category(
     category_id: int,
     category_data: MenuCategoryUpdate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update menu category (Manager/Admin only)."""
-    
-    # Check if category exists
-    category = await db.menucategory.find_unique(
-        where={"id": category_id},
-        include={"menu": {"include": {"restaurant": True}}}
+
+    stmt = (
+        select(MenuCategory)
+        .where(MenuCategory.id == category_id)
+        .options(selectinload(MenuCategory.menu).selectinload(Menu.restaurant))
     )
+    category = (await db.execute(stmt)).scalar_one_or_none()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu category not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update categories for your own restaurant's menus"
         )
-    
-    # Prepare update data
+
     update_data = {}
     for field, value in category_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
-    
+
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
-    
+
     try:
-        updated_category = await db.menucategory.update(
-            where={"id": category_id},
-            data=update_data
-        )
-        
-        return MenuCategoryResponse.model_validate(updated_category)
-        
+        for field, value in update_data.items():
+            setattr(category, field, value)
+        await db.commit()
+        await db.refresh(category)
+
+        return MenuCategoryResponse.model_validate(category)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -299,32 +283,33 @@ async def update_menu_category(
 async def delete_menu_category(
     category_id: int,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete menu category (Manager/Admin only)."""
-    
-    # Check if category exists
-    category = await db.menucategory.find_unique(
-        where={"id": category_id},
-        include={"menu": {"include": {"restaurant": True}}}
+
+    stmt = (
+        select(MenuCategory)
+        .where(MenuCategory.id == category_id)
+        .options(selectinload(MenuCategory.menu).selectinload(Menu.restaurant))
     )
+    category = (await db.execute(stmt)).scalar_one_or_none()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu category not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete categories for your own restaurant's menus"
         )
-    
+
     try:
-        await db.menucategory.delete(where={"id": category_id})
+        await db.delete(category)
+        await db.commit()
         return {"message": f"Category '{category.name}' deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -338,47 +323,48 @@ async def delete_menu_category(
 async def create_dish(
     dish_data: DishCreate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create a new dish (Manager/Admin only)."""
-    
-    # Check if category exists and get restaurant info
-    category = await db.menucategory.find_unique(
-        where={"id": dish_data.categoryId},
-        include={"menu": {"include": {"restaurant": True}}}
+
+    stmt = (
+        select(MenuCategory)
+        .where(MenuCategory.id == dish_data.categoryId)
+        .options(selectinload(MenuCategory.menu).selectinload(Menu.restaurant))
     )
+    category = (await db.execute(stmt)).scalar_one_or_none()
     if not category:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Menu category not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only create dishes for your own restaurant's menus"
         )
-    
+
     try:
-        dish = await db.dish.create(
-            data={
-                "categoryId": dish_data.categoryId,
-                "name": dish_data.name,
-                "description": dish_data.description,
-                "price": dish_data.price,
-                "image": dish_data.image,
-                "gallery": dish_data.gallery or [],
-                "isAvailable": dish_data.isAvailable,
-                "quantity": dish_data.quantity,
-                "preparationTime": dish_data.preparationTime,
-                "popularity": dish_data.popularity,
-                "displayOrder": dish_data.displayOrder
-            }
+        dish = Dish(
+            categoryId=dish_data.categoryId,
+            name=dish_data.name,
+            description=dish_data.description,
+            price=dish_data.price,
+            image=dish_data.image,
+            gallery=dish_data.gallery or [],
+            isAvailable=dish_data.isAvailable,
+            quantity=dish_data.quantity,
+            preparationTime=dish_data.preparationTime,
+            popularity=dish_data.popularity,
+            displayOrder=dish_data.displayOrder
         )
-        
+        db.add(dish)
+        await db.commit()
+        await db.refresh(dish)
+
         return DishResponse.model_validate(dish)
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -390,18 +376,18 @@ async def create_dish(
 async def get_dish(
     dish_id: int,
     current_user = Depends(get_current_user_optional),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get dish by ID (public endpoint)."""
-    
-    dish = await db.dish.find_unique(where={"id": dish_id})
-    
+
+    dish = await db.get(Dish, dish_id)
+
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
+
     return DishResponse.model_validate(dish)
 
 
@@ -410,48 +396,51 @@ async def update_dish(
     dish_id: int,
     dish_data: DishUpdate,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update dish (Manager/Admin only)."""
-    
-    # Check if dish exists
-    dish = await db.dish.find_unique(
-        where={"id": dish_id},
-        include={"category": {"include": {"menu": {"include": {"restaurant": True}}}}}
+
+    stmt = (
+        select(Dish)
+        .where(Dish.id == dish_id)
+        .options(
+            selectinload(Dish.category)
+            .selectinload(MenuCategory.menu)
+            .selectinload(Menu.restaurant)
+        )
     )
+    dish = (await db.execute(stmt)).scalar_one_or_none()
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != dish.category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update dishes for your own restaurant's menus"
         )
-    
-    # Prepare update data
+
     update_data = {}
     for field, value in dish_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
-    
+
     if not update_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid fields to update"
         )
-    
+
     try:
-        updated_dish = await db.dish.update(
-            where={"id": dish_id},
-            data=update_data
-        )
-        
-        return DishResponse.model_validate(updated_dish)
-        
+        for field, value in update_data.items():
+            setattr(dish, field, value)
+        await db.commit()
+        await db.refresh(dish)
+
+        return DishResponse.model_validate(dish)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -463,32 +452,37 @@ async def update_dish(
 async def delete_dish(
     dish_id: int,
     current_user = Depends(get_current_manager_or_admin),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Delete dish (Manager/Admin only)."""
-    
-    # Check if dish exists
-    dish = await db.dish.find_unique(
-        where={"id": dish_id},
-        include={"category": {"include": {"menu": {"include": {"restaurant": True}}}}}
+
+    stmt = (
+        select(Dish)
+        .where(Dish.id == dish_id)
+        .options(
+            selectinload(Dish.category)
+            .selectinload(MenuCategory.menu)
+            .selectinload(Menu.restaurant)
+        )
     )
+    dish = (await db.execute(stmt)).scalar_one_or_none()
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != dish.category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete dishes for your own restaurant's menus"
         )
-    
+
     try:
-        await db.dish.delete(where={"id": dish_id})
+        await db.delete(dish)
+        await db.commit()
         return {"message": f"Dish '{dish.name}' deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -500,39 +494,42 @@ async def delete_dish(
 async def toggle_dish_availability(
     dish_id: int,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Toggle dish availability (Staff only - for their restaurant)."""
-    
-    # Check if dish exists
-    dish = await db.dish.find_unique(
-        where={"id": dish_id},
-        include={"category": {"include": {"menu": {"include": {"restaurant": True}}}}}
+
+    stmt = (
+        select(Dish)
+        .where(Dish.id == dish_id)
+        .options(
+            selectinload(Dish.category)
+            .selectinload(MenuCategory.menu)
+            .selectinload(Menu.restaurant)
+        )
     )
+    dish = (await db.execute(stmt)).scalar_one_or_none()
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != dish.category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only manage dishes for your own restaurant"
         )
-    
+
     try:
-        updated_dish = await db.dish.update(
-            where={"id": dish_id},
-            data={"isAvailable": not dish.isAvailable}
-        )
-        
+        dish.isAvailable = not dish.isAvailable
+        await db.commit()
+        await db.refresh(dish)
+
         return {
-            "message": f"Dish '{dish.name}' {'made available' if updated_dish.isAvailable else 'made unavailable'}",
-            "dish": DishResponse.model_validate(updated_dish)
+            "message": f"Dish '{dish.name}' {'made available' if dish.isAvailable else 'made unavailable'}",
+            "dish": DishResponse.model_validate(dish)
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -545,42 +542,43 @@ async def update_dish_quantity(
     dish_id: int,
     quantity: int = Query(..., ge=0),
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update dish quantity (Staff only - for their restaurant)."""
-    
-    # Check if dish exists
-    dish = await db.dish.find_unique(
-        where={"id": dish_id},
-        include={"category": {"include": {"menu": {"include": {"restaurant": True}}}}}
+
+    stmt = (
+        select(Dish)
+        .where(Dish.id == dish_id)
+        .options(
+            selectinload(Dish.category)
+            .selectinload(MenuCategory.menu)
+            .selectinload(Menu.restaurant)
+        )
     )
+    dish = (await db.execute(stmt)).scalar_one_or_none()
     if not dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dish not found"
         )
-    
-    # Check permissions
+
     if current_user.role != "ADMIN" and current_user.restaurantId != dish.category.menu.restaurantId:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only manage dishes for your own restaurant"
         )
-    
+
     try:
-        updated_dish = await db.dish.update(
-            where={"id": dish_id},
-            data={
-                "quantity": quantity,
-                "isAvailable": quantity > 0  # Auto-disable if quantity is 0
-            }
-        )
-        
+        dish.quantity = quantity
+        dish.isAvailable = quantity > 0
+        await db.commit()
+        await db.refresh(dish)
+
         return {
             "message": f"Dish '{dish.name}' quantity updated to {quantity}",
-            "dish": DishResponse.model_validate(updated_dish)
+            "dish": DishResponse.model_validate(dish)
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

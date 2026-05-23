@@ -4,15 +4,46 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
-from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics,users
-from app.auth.jwt import get_password_hash
-from app.models.user import UserRole
+from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics, users
+
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.utils.logging import logger
+
+from app.auth.jwt import get_password_hash
+from app.models.sqlalchemy_models import User, UserRole
+
+
+async def _ensure_admin():
+    """Create default admin on startup if it doesn't exist yet."""
+    try:
+        db = await get_db()
+        result = await db.execute(select(User).where(User.email == "admin@caravane.com"))
+        existing = result.scalar_one_or_none()
+        if not existing:
+            hashed = get_password_hash("admin123456")
+            admin = User(
+                email="admin@caravane.com",
+                phone=1234567890,
+                firstName="Admin",
+                lastName="User",
+                password=hashed,
+                role=UserRole.ADMIN,
+                isActive=True,
+            )
+            db.add(admin)
+            await db.commit()
+            await db.refresh(admin)
+            logger.info("Default admin created: admin@caravane.com / admin123456")
+        else:
+            logger.debug("Default admin already exists, skipping")
+        await db.close()
+    except Exception as e:
+        logger.warning("Could not create default admin: {}", e)
 
 
 @asynccontextmanager
@@ -21,7 +52,7 @@ async def lifespan(app: FastAPI):
     try:
         await connect_db()
         logger.info("Database connected successfully")
-        await ensure_admin_user_exists()
+        await _ensure_admin()
     except Exception as e:
         logger.error("Failed to connect to database: {}", e)
         raise
@@ -33,7 +64,6 @@ async def lifespan(app: FastAPI):
         logger.error("Error disconnecting from database: {}", e)
 
 
-# Create FastAPI app
 app = FastAPI(
     title="Caravane Restaurant Management API",
     description="JWT Authentication with Role-Based Access Control",
@@ -43,13 +73,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Request ID middleware (added before CORS)
 app.add_middleware(RequestIdMiddleware)
-
-# Request logging middleware (runs after request_id is set)
 app.add_middleware(RequestLoggingMiddleware)
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=settings.BACKEND_CORS_ORIGIN_REGEX,
@@ -59,10 +85,8 @@ app.add_middleware(
 )
 
 
-# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler for better error responses."""
     return JSONResponse(
         status_code=500,
         content={
@@ -72,42 +96,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-async def ensure_admin_user_exists():
-    """Check if an admin user exists, create one if not."""
-    try:
-        db = get_db()
-        
-        # Check if any admin user exists
-        admin_user = await db.user.find_first(
-            where={"role": UserRole.ADMIN.value}
-        )
-        
-        if admin_user:
-            logger.info("Admin user already exists: {}", admin_user.email)
-            return
-
-        # Create default admin user
-        hashed_password = get_password_hash("admin123456")
-
-        admin_user = await db.user.create(
-            data={
-                "email": "admin@caravane.com",
-                "phone": 1234567890,
-                "firstName": "Admin",
-                "lastName": "User",
-                "password": hashed_password,
-                "role": UserRole.ADMIN.value,
-                "isActive": True
-            }
-        )
-
-        logger.info("Default admin user created. Email: {}. Please change credentials!", admin_user.email)
-
-    except Exception as e:
-        logger.error("Error creating admin user: {}", e)
-
-
-# Include routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(protected.router, prefix="/api")
 app.include_router(restaurants.router, prefix="/api")
@@ -129,10 +117,8 @@ app.include_router(users.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
     return {
         "status": "healthy",
         "message": "Caravane API is running",
@@ -140,10 +126,8 @@ async def health_check():
     }
 
 
-# Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
     return {
         "message": "Welcome to Caravane Restaurant Management API",
         "version": "1.0.0",

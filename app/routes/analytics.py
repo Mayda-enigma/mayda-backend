@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_staff_user, get_current_user
@@ -11,6 +14,7 @@ from app.models.analytics import (
     RestaurantAnalyticsResponse,
     TopDishItem,
 )
+from app.models.sqlalchemy_models import Dish, Order, OrderItem
 from app.models.user import UserRole
 
 
@@ -49,26 +53,22 @@ def get_user_restaurant_id(current_user) -> int:
     return current_user.restaurantId
 
 
-async def get_restaurant_orders_for_range(db: "Prisma", restaurant_id: int, time_range: AnalyticsRange):
+async def get_restaurant_orders_for_range(db: AsyncSession, restaurant_id: int, time_range: AnalyticsRange):
     window_end = datetime.now()
     window_start = get_window_start(time_range, window_end)
 
-    orders = await db.order.find_many(
-        where={
-            "restaurantId": restaurant_id,
-            "orderTime": {
-                "gte": window_start,
-                "lte": window_end,
-            },
-        },
-        include={
-            "items": {
-                "include": {
-                    "dish": True,
-                }
-            }
-        },
+    result = await db.execute(
+        select(Order)
+        .where(
+            and_(
+                Order.restaurantId == restaurant_id,
+                Order.orderTime >= window_start,
+                Order.orderTime <= window_end,
+            )
+        )
+        .options(selectinload(Order.items).selectinload(OrderItem.dish))
     )
+    orders = result.scalars().all()
 
     return orders
 
@@ -77,7 +77,7 @@ async def get_restaurant_orders_for_range(db: "Prisma", restaurant_id: int, time
 async def get_restaurant_analytics(
     time_range: AnalyticsRange = Query(AnalyticsRange.DAY, alias="range"),
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get manager dashboard analytics for the current user's restaurant."""
 
@@ -134,7 +134,7 @@ async def get_restaurant_analytics(
 async def get_kitchen_analytics(
     time_range: AnalyticsRange = Query(AnalyticsRange.DAY, alias="range"),
     current_user=Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get kitchen dashboard analytics for the current staff user's restaurant."""
 

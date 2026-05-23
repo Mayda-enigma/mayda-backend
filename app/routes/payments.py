@@ -2,11 +2,15 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional
 import requests
 from app.models.payment import (
-    PaymentResponse, PaymentInitiateRequest, 
+    PaymentResponse, PaymentInitiateRequest,
     PaymentInitiateResponse, PaymentStatusResponse, PaymentListResponse,
     GUIDINI_PAY_URL, GUIDINI_PAY_HEADERS
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db_session
+from app.models.sqlalchemy_models import Payments, Order, User, Restaurant
 from app.middleware.roles import get_current_user, get_current_staff_user
 
 
@@ -17,64 +21,67 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 async def initiate_payment_with_otp(
     payment_request: PaymentInitiateRequest,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Initiate payment with OTP verification for added security.
     Sends OTP to user's phone before processing payment.
     """
     from app.utils.sms_service import sms_service
-    
+
     if not sms_service:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SMS service is not available for secure payments"
         )
-    
-    
+
+
     # Check if Guidini Pay is configured
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Payment gateway is not configured. Please contact support."
         )
-    
+
     try:
         # Get the order and validate it belongs to the user
-        order = await db.order.find_unique(
-            where={"id": payment_request.orderId},
-            include={"user": True, "restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.id == payment_request.orderId)
+                .options(selectinload(Order.user), selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only pay for your own orders"
             )
-        
+
         # Check if order is already paid
         if order.paymentStatus == "PAID":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order is already paid"
             )
-        
+
         # Send OTP for payment confirmation
         otp_result = await sms_service.send_otp(current_user.id, str(current_user.phone), "PAYMENT_CONFIRMATION")
-        
+
         if not otp_result.get("success", False):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send OTP for payment verification"
             )
-        
+
         return PaymentInitiateResponse(
             success=True,
             message="OTP sent to your phone. Please verify to proceed with payment.",
@@ -83,7 +90,7 @@ async def initiate_payment_with_otp(
             formUrl=None,
             amount=str(order.totalAmount)
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -97,65 +104,70 @@ async def initiate_payment_with_otp(
 async def initiate_payment(
     payment_request: PaymentInitiateRequest,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Initiate a payment for an order using Guidini Pay.
     This will create a payment record and return the payment form URL.
     """
-    
+
     # Check if Guidini Pay is configured
     if not GUIDINI_PAY_HEADERS.get("x-app-key") or not GUIDINI_PAY_HEADERS.get("x-app-secret"):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Payment gateway is not configured. Please contact support."
         )
-    
+
     try:
         # Get the order and validate it belongs to the user
-        order = await db.order.find_unique(
-            where={"id": payment_request.orderId},
-            include={"user": True, "restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.id == payment_request.orderId)
+                .options(selectinload(Order.user), selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only pay for your own orders"
             )
-        
+
         # Check if order is already paid
         if order.paymentStatus == "PAID":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Order is already paid"
             )
-        
+
         # Check if payment already exists for this order
-        existing_payment = await db.payments.find_unique(
-            where={"orderId": payment_request.orderId}
-        )
-        
+        existing_payment = (
+            await db.execute(
+                select(Payments).where(Payments.orderId == payment_request.orderId)
+            )
+        ).scalar_one_or_none()
+
         if existing_payment:
             return PaymentInitiateResponse(
                 success=False,
                 message="Payment already exists for this order",
                 error="PAYMENT_EXISTS"
             )
-        
+
         # Prepare Guidini Pay request
         guidini_data = {
             "amount": str(int(order.totalAmount * 100)),  # Convert to cents
             "language": payment_request.language
         }
-        
+
         # Call Guidini Pay API
         response = requests.post(
             GUIDINI_PAY_URL,
@@ -163,7 +175,7 @@ async def initiate_payment(
             headers=GUIDINI_PAY_HEADERS,
             timeout=30
         )
-        
+
         # Try to parse the response regardless of status code
         try:
             guidini_response = response.json()
@@ -172,18 +184,18 @@ async def initiate_payment(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Invalid JSON response from payment gateway. Status: {response.status_code}, Response: {response.text}"
             )
-        
+
         # Check if response has expected structure
         if "data" not in guidini_response:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Unexpected payment gateway response format: {guidini_response}"
             )
-        
+
         # Extract transaction data
         transaction_data = guidini_response["data"]
         transaction_id = transaction_data["id"]
-        
+
         # Extract form_url and clean it if it has markdown brackets
         form_url = transaction_data["attributes"]["form_url"]
         # Remove markdown brackets if present: [url](url) -> url
@@ -192,17 +204,18 @@ async def initiate_payment(
             start = form_url.find('](') + 2
             end = form_url.rfind(')')
             form_url = form_url[start:end]
-        
+
         amount = transaction_data["attributes"]["amount"]
-        
+
         # Create payment record in database
-        payment = await db.payments.create(
-            data={
-                "paymentId": transaction_id,
-                "orderId": payment_request.orderId
-            }
+        payment = Payments(
+            paymentId=transaction_id,
+            orderId=payment_request.orderId
         )
-        
+        db.add(payment)
+        await db.commit()
+        await db.refresh(payment)
+
         return PaymentInitiateResponse(
             success=True,
             paymentId=str(payment.id),
@@ -211,7 +224,7 @@ async def initiate_payment(
             amount=amount,
             message="Payment initiated successfully"
         )
-        
+
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -228,39 +241,42 @@ async def initiate_payment(
 async def get_payment_receipt(
     order_number: str,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Get payment receipt from Guidini Pay by order number.
     Routes the request to Guidini Pay receipt API and returns the response.
     """
-    
+
     try:
         # First, find the order by orderNumber to validate access
-        order = await db.order.find_unique(
-            where={"orderNumber": order_number},
-            include={"user": True, "restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.orderNumber == order_number)
+                .options(selectinload(Order.user), selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check authorization: user owns the order OR user is staff of the restaurant
         is_owner = current_user.role == "CLIENT" and order.userId == current_user.id
         is_restaurant_staff = (
             current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"] and
             current_user.restaurantId == order.restaurantId
         )
-        
+
         if not (is_owner or is_restaurant_staff):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only download receipts for your own orders or your restaurant's orders"
             )
-        
+
         # Make request to Guidini Pay receipt API
         response = requests.get(
             "https://epay.guiddini.dz/api/payment/receipt",
@@ -268,16 +284,16 @@ async def get_payment_receipt(
             headers=GUIDINI_PAY_HEADERS,
             timeout=30
         )
-        
+
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Payment gateway error"
             )
-        
+
         # Return the Guidini Pay receipt response directly
         return response.json()
-        
+
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -294,39 +310,42 @@ async def get_payment_receipt(
 async def show_payment_status(
     order_number: str,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Get payment status from Guidini Pay by order number.
     Routes the request to Guidini Pay and returns the response.
     """
-    
+
     try:
         # First, find the order by orderNumber to validate access
-        order = await db.order.find_unique(
-            where={"orderNumber": order_number},
-            include={"user": True, "restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.orderNumber == order_number)
+                .options(selectinload(Order.user), selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check authorization: user owns the order OR user is staff of the restaurant
         is_owner = current_user.role == "CLIENT" and order.userId == current_user.id
         is_restaurant_staff = (
             current_user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"] and
             current_user.restaurantId == order.restaurantId
         )
-        
+
         if not (is_owner or is_restaurant_staff):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view payment status for your own orders or your restaurant's orders"
             )
-        
+
         # Make request to Guidini Pay show API
         response = requests.get(
             "https://epay.guiddini.dz/api/payment/show",
@@ -334,16 +353,16 @@ async def show_payment_status(
             headers=GUIDINI_PAY_HEADERS,
             timeout=30
         )
-        
+
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Payment gateway error"
             )
-        
+
         # Return the Guidini Pay response directly
         return response.json()
-        
+
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -360,36 +379,35 @@ async def show_payment_status(
 async def get_payment(
     payment_id: int,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get payment details by ID."""
-    
+
     try:
-        payment = await db.payments.find_unique(
-            where={"id": payment_id},
-            include={
-                "order": {
-                    "include": {
-                        "user": True,
-                        "restaurant": True
-                    }
-                }
-            }
-        )
-        
+        payment = (
+            await db.execute(
+                select(Payments)
+                .where(Payments.id == payment_id)
+                .options(
+                    selectinload(Payments.order).selectinload(Order.user),
+                    selectinload(Payments.order).selectinload(Order.restaurant),
+                )
+            )
+        ).scalar_one_or_none()
+
         if not payment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payment not found"
             )
-        
+
         # Check if user owns the payment (unless they're staff)
         if current_user.role == "CLIENT" and payment.order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view your own payments"
             )
-        
+
         return PaymentResponse(
             id=payment.id,
             paymentId=payment.paymentId,
@@ -404,7 +422,7 @@ async def get_payment(
             },
             createdAt=payment.createdAt
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -416,38 +434,43 @@ async def get_payment(
 async def get_payment_by_order(
     order_id: int,
     current_user=Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get payment status for a specific order."""
-    
+
     try:
         # Get the order first to validate access
-        order = await db.order.find_unique(
-            where={"id": order_id},
-            include={"user": True, "restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.id == order_id)
+                .options(selectinload(Order.user), selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check if user owns the order (unless they're staff)
         if current_user.role == "CLIENT" and order.userId != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view payments for your own orders"
             )
-        
+
         # Get the payment for this order
-        payment = await db.payments.find_unique(
-            where={"orderId": order_id}
-        )
-        
+        payment = (
+            await db.execute(
+                select(Payments).where(Payments.orderId == order_id)
+            )
+        ).scalar_one_or_none()
+
         if not payment:
             return None
-        
+
         return PaymentStatusResponse(
             id=payment.id,
             paymentId=payment.paymentId,
@@ -457,7 +480,7 @@ async def get_payment_by_order(
             status=order.paymentStatus,
             createdAt=payment.createdAt
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -471,17 +494,21 @@ async def list_payments(
     page_size: int = Query(20, ge=1, le=100),
     restaurant_id: Optional[int] = Query(None),
     current_user=Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     List payments (staff only).
     Filter by restaurant if specified.
     """
-    
+
     try:
-        # Build where clause
-        where_clause = {}
-        
+        # Build base queries with optional restaurant filter
+        base_query = select(Payments).options(
+            selectinload(Payments.order).selectinload(Order.user),
+            selectinload(Payments.order).selectinload(Order.restaurant),
+        )
+        count_query = select(func.count(Payments.id))
+
         # Filter by restaurant if specified
         if restaurant_id:
             # Validate staff has access to this restaurant
@@ -490,30 +517,25 @@ async def list_payments(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You can only view payments for your restaurant"
                 )
-            where_clause["order"] = {"restaurantId": restaurant_id}
+            base_query = base_query.join(Payments.order).where(Order.restaurantId == restaurant_id)
+            count_query = count_query.join(Payments.order).where(Order.restaurantId == restaurant_id)
         elif current_user.restaurantId:
-            # Staff can only see their restaurant's payments
-            where_clause["order"] = {"restaurantId": current_user.restaurantId}
-        
+            base_query = base_query.join(Payments.order).where(Order.restaurantId == current_user.restaurantId)
+            count_query = count_query.join(Payments.order).where(Order.restaurantId == current_user.restaurantId)
+
         # Get total count
-        total = await db.payments.count(where=where_clause)
-        
+        total = (await db.execute(count_query)).scalar()
+
         # Get payments with pagination
-        payments = await db.payments.find_many(
-            where=where_clause,
-            include={
-                "order": {
-                    "include": {
-                        "user": True,
-                        "restaurant": True
-                    }
-                }
-            },
-            skip=(page - 1) * page_size,
-            take=page_size,
-            order_by={"createdAt": "desc"}
-        )
-        
+        payments = (
+            await db.execute(
+                base_query
+                .order_by(Payments.createdAt.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).scalars().all()
+
         # Format response
         payment_list = []
         for payment in payments:
@@ -526,14 +548,14 @@ async def list_payments(
                 status=payment.order.paymentStatus,
                 createdAt=payment.createdAt
             ))
-        
+
         return PaymentListResponse(
             payments=payment_list,
             total=total,
             page=page,
             pageSize=page_size
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -542,31 +564,33 @@ async def list_payments(
 
 
 @router.get("/callback")
-async def payment_callback(order_number: str = Query(...), db: "Prisma" = Depends(get_db_session)):
+async def payment_callback(order_number: str = Query(...), db: AsyncSession = Depends(get_db_session)):
     """
     Payment confirmation callback from Guidini Pay.
     Called when payment is confirmed with order_number as query parameter.
     """
-    
+
     try:
         # Find the order by orderNumber
-        order = await db.order.find_unique(
-            where={"orderNumber": order_number},
-            include={"restaurant": True, "user": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.orderNumber == order_number)
+                .options(selectinload(Order.restaurant), selectinload(Order.user))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Update the order payment status to PAID
-        await db.order.update(
-            where={"orderNumber": order_number},
-            data={"paymentStatus": "PAID"}
-        )
-        
+        order.paymentStatus = "PAID"
+        await db.commit()
+        await db.refresh(order)
+
         # You can redirect to a success page or return confirmation
         return {
             "success": True,
@@ -577,7 +601,7 @@ async def payment_callback(order_number: str = Query(...), db: "Prisma" = Depend
             "totalAmount": order.totalAmount,
             "restaurant": order.restaurant.name if order.restaurant else None
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -597,7 +621,7 @@ async def guidini_webhook():
     # 2. Parse the payment status update
     # 3. Update the order's payment status in the database
     # 4. Send notifications if needed
-    
+
     return {"status": "received"}
 
 
@@ -606,13 +630,13 @@ async def update_payment_status(
     order_id: int,
     new_status: str,
     current_user=Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Manually update payment status (staff only).
     This is for manual payment methods like cash.
     """
-    
+
     try:
         # Validate the new status
         valid_statuses = ["PENDING", "PAID", "FAILED", "REFUNDED"]
@@ -621,39 +645,41 @@ async def update_payment_status(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid payment status. Must be one of: {valid_statuses}"
             )
-        
+
         # Get the order
-        order = await db.order.find_unique(
-            where={"id": order_id},
-            include={"restaurant": True}
-        )
-        
+        order = (
+            await db.execute(
+                select(Order)
+                .where(Order.id == order_id)
+                .options(selectinload(Order.restaurant))
+            )
+        ).scalar_one_or_none()
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
-        
+
         # Check if staff has access to this restaurant
         if current_user.restaurantId and current_user.restaurantId != order.restaurantId:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update payments for your restaurant's orders"
             )
-        
+
         # Update the order's payment status
-        await db.order.update(
-            where={"id": order_id},
-            data={"paymentStatus": new_status}
-        )
-        
+        order.paymentStatus = new_status
+        await db.commit()
+        await db.refresh(order)
+
         return {
             "success": True,
             "message": f"Payment status updated to {new_status}",
             "orderId": order_id,
             "paymentStatus": new_status
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

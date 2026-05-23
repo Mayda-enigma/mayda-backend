@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
 import uuid
 from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import selectinload
 from app.models.order import (
     OrderCreate, OrderResponse, OrderListResponse,
     PublicOrderCreate, OrderStatusUpdate, OrderStatus, OrderType, DeliveryOrderCreate
@@ -10,6 +13,7 @@ from app.core.database import get_db_session
 from app.middleware.roles import (
     get_current_staff_user, get_current_user
 )
+from app.models.sqlalchemy_models import Order, OrderItem, User, Restaurant, Table, Dish, Address
 from app.routes.notifications import create_restaurant_event_notifications
 
 
@@ -17,8 +21,8 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
 def _order_to_response_dict(order):
-    """Convert Prisma order ORM to dict for OrderResponse validation."""
-    order_dict = order.__dict__.copy()
+    """Convert SQLAlchemy order ORM to dict for OrderResponse validation."""
+    order_dict = {c.name: getattr(order, c.name) for c in order.__table__.columns}
 
     order_dict["items"] = [
         {
@@ -85,7 +89,7 @@ def _order_to_response_dict(order):
 # ==================== PUBLIC ORDER ENDPOINTS (No Auth Required) ====================
 
 @router.post("/public", response_model=OrderResponse)
-async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depends(get_db_session)):
+async def create_public_order(order_data: PublicOrderCreate, db: AsyncSession = Depends(get_db_session)):
     """
     Create order without authentication (for walk-in customers using QR codes/NFC at tables).
     
@@ -110,7 +114,8 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
         )
     
     # Validate restaurant exists
-    restaurant = await db.restaurant.find_unique(where={"id": order_data.restaurantId})
+    result = await db.execute(select(Restaurant).where(Restaurant.id == order_data.restaurantId))
+    restaurant = result.scalar_one_or_none()
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -119,12 +124,10 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
     
     # Validate table if provided
     if order_data.tableId:
-        table = await db.table.find_unique(
-            where={
-                "id": order_data.tableId,
-                "restaurantId": order_data.restaurantId
-            }
+        result = await db.execute(
+            select(Table).where(and_(Table.id == order_data.tableId, Table.restaurantId == order_data.restaurantId))
         )
+        table = result.scalar_one_or_none()
         if not table or not table.isActive:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -143,7 +146,8 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
     
     for item in order_data.items:
         # Get dish details
-        dish = await db.dish.find_unique(where={"id": item.dishId})
+        result = await db.execute(select(Dish).where(Dish.id == item.dishId))
+        dish = result.scalar_one_or_none()
         if not dish:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -196,53 +200,54 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
     
     try:
         # Create order
-        order = await db.order.create(
-            data={
-                "orderNumber": order_number,
-                "restaurantId": order_data.restaurantId,
-                "tableId": order_data.tableId,
-                "type": order_data.type.value,
-                "status": OrderStatus.PENDING.value,
-                "subtotal": subtotal,
-                "deliveryFee": delivery_fee,
-                "discount": discount,
-                "totalAmount": total_amount,
-                "deliveryAddressId": order_data.deliveryAddressId,
-                "paymentStatus": "PENDING",
-                "notes": order_data.notes,
-                "orderTime": datetime.now()
-            }
+        order = Order(
+            orderNumber=order_number,
+            restaurantId=order_data.restaurantId,
+            tableId=order_data.tableId,
+            type=order_data.type.value,
+            status=OrderStatus.PENDING.value,
+            subtotal=subtotal,
+            deliveryFee=delivery_fee,
+            discount=discount,
+            totalAmount=total_amount,
+            deliveryAddressId=order_data.deliveryAddressId,
+            paymentStatus="PENDING",
+            notes=order_data.notes,
+            orderTime=datetime.now()
         )
+        db.add(order)
+        await db.commit()
+        await db.refresh(order)
         
         # Create order items and update dish quantities
         for item_data in validated_items:
-            await db.orderitem.create(
-                data={
-                    "orderId": order.id,
-                    "dishId": item_data["dish"].id,
-                    "quantity": item_data["quantity"],
-                    "unitPrice": item_data["unitPrice"],
-                    "totalPrice": item_data["totalPrice"],
-                    "notes": item_data["notes"]
-                }
+            order_item = OrderItem(
+                orderId=order.id,
+                dishId=item_data["dish"].id,
+                quantity=item_data["quantity"],
+                unitPrice=item_data["unitPrice"],
+                totalPrice=item_data["totalPrice"],
+                notes=item_data["notes"]
             )
+            db.add(order_item)
             
             # Update dish quantity
-            await db.dish.update(
-                where={"id": item_data["dish"].id},
-                data={"quantity": item_data["dish"].quantity - item_data["quantity"]}
-            )
+            item_data["dish"].quantity = item_data["dish"].quantity - item_data["quantity"]
+        
+        await db.commit()
         
         # Fetch complete order with relations
-        complete_order = await db.order.find_unique(
-            where={"id": order.id},
-            include={
-                "items": {"include": {"dish": True}},
-                "table": True,
-                "restaurant": True,
-                "user": True,
-            }
+        result = await db.execute(
+            select(Order)
+            .where(Order.id == order.id)
+            .options(
+                selectinload(Order.items).selectinload(OrderItem.dish),
+                selectinload(Order.table),
+                selectinload(Order.restaurant),
+                selectinload(Order.user),
+            )
         )
+        complete_order = result.scalar_one()
 
         await create_restaurant_event_notifications(
             db=db,
@@ -273,15 +278,17 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
 async def create_order(
     order_data: OrderCreate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create order for authenticated user using their stored profile information."""
     
     # Get user's complete profile including address
-    user_profile = await db.user.find_unique(
-        where={"id": current_user.id},
-        include={"address": True}
+    result = await db.execute(
+        select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.address))
     )
+    user_profile = result.scalar_one_or_none()
     
     if not user_profile:
         raise HTTPException(
@@ -302,7 +309,8 @@ async def create_order(
             order_data.deliveryAddressId = user_profile.address.id
     
     # Validate restaurant
-    restaurant = await db.restaurant.find_unique(where={"id": order_data.restaurantId})
+    result = await db.execute(select(Restaurant).where(Restaurant.id == order_data.restaurantId))
+    restaurant = result.scalar_one_or_none()
     if not restaurant or not restaurant.isActive:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -311,12 +319,10 @@ async def create_order(
     
     # Validate table if provided
     if order_data.tableId:
-        table = await db.table.find_unique(
-            where={
-                "id": order_data.tableId,
-                "restaurantId": order_data.restaurantId
-            }
+        result = await db.execute(
+            select(Table).where(and_(Table.id == order_data.tableId, Table.restaurantId == order_data.restaurantId))
         )
+        table = result.scalar_one_or_none()
         if not table or not table.isActive:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -335,7 +341,8 @@ async def create_order(
     validated_items = []
     
     for item in order_data.items:
-        dish = await db.dish.find_unique(where={"id": item.dishId})
+        result = await db.execute(select(Dish).where(Dish.id == item.dishId))
+        dish = result.scalar_one_or_none()
         if not dish:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -372,54 +379,55 @@ async def create_order(
     order_number = f"ORD-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
     
     try:
-        order = await db.order.create(
-            data={
-                "orderNumber": order_number,
-                "userId": current_user.id,
-                "restaurantId": order_data.restaurantId,
-                "tableId": order_data.tableId,
-                "type": order_data.type.value,
-                "status": OrderStatus.PENDING.value,
-                "subtotal": subtotal,
-                "deliveryFee": delivery_fee,
-                "discount": discount,
-                "totalAmount": total_amount,
-                "deliveryAddressId": order_data.deliveryAddressId,
-                "paymentStatus": "PENDING",
-                "notes": order_data.notes,
-                "orderTime": datetime.now()
-            }
+        order = Order(
+            orderNumber=order_number,
+            userId=current_user.id,
+            restaurantId=order_data.restaurantId,
+            tableId=order_data.tableId,
+            type=order_data.type.value,
+            status=OrderStatus.PENDING.value,
+            subtotal=subtotal,
+            deliveryFee=delivery_fee,
+            discount=discount,
+            totalAmount=total_amount,
+            deliveryAddressId=order_data.deliveryAddressId,
+            paymentStatus="PENDING",
+            notes=order_data.notes,
+            orderTime=datetime.now()
         )
+        db.add(order)
+        await db.commit()
+        await db.refresh(order)
         
         # Create order items and update quantities
         for item_data in validated_items:
-            await db.orderitem.create(
-                data={
-                    "orderId": order.id,
-                    "dishId": item_data["dish"].id,
-                    "quantity": item_data["quantity"],
-                    "unitPrice": item_data["unitPrice"],
-                    "totalPrice": item_data["totalPrice"],
-                    "notes": item_data["notes"]
-                }
+            order_item = OrderItem(
+                orderId=order.id,
+                dishId=item_data["dish"].id,
+                quantity=item_data["quantity"],
+                unitPrice=item_data["unitPrice"],
+                totalPrice=item_data["totalPrice"],
+                notes=item_data["notes"]
             )
+            db.add(order_item)
             
-            await db.dish.update(
-                where={"id": item_data["dish"].id},
-                data={"quantity": item_data["dish"].quantity - item_data["quantity"]}
-            )
+            item_data["dish"].quantity = item_data["dish"].quantity - item_data["quantity"]
+        
+        await db.commit()
         
         # Fetch complete order with user contact details
-        complete_order = await db.order.find_unique(
-            where={"id": order.id},
-            include={
-                "items": {"include": {"dish": True}},
-                "table": True,
-                "restaurant": True,
-                "deliveryAddress": True,
-                "user": True,
-            }
+        result = await db.execute(
+            select(Order)
+            .where(Order.id == order.id)
+            .options(
+                selectinload(Order.items).selectinload(OrderItem.dish),
+                selectinload(Order.table),
+                selectinload(Order.restaurant),
+                selectinload(Order.deliveryAddress),
+                selectinload(Order.user),
+            )
         )
+        complete_order = result.scalar_one()
 
         await create_restaurant_event_notifications(
             db=db,
@@ -449,15 +457,17 @@ async def create_order(
 async def create_delivery_order(
     order_data: DeliveryOrderCreate,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Create delivery order for authenticated user with automatic address handling."""
     
     # Get user's complete profile including address
-    user_profile = await db.user.find_unique(
-        where={"id": current_user.id},
-        include={"address": True}
+    result = await db.execute(
+        select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.address))
     )
+    user_profile = result.scalar_one_or_none()
     
     if not user_profile:
         raise HTTPException(
@@ -491,15 +501,16 @@ async def create_delivery_order(
             )
         
         # Create temporary address for this delivery
-        new_address = await db.address.create(
-            data={
-                "street": order_data.customDeliveryAddress.get("street"),
-                "city": order_data.customDeliveryAddress.get("city"),
-                "latitude": order_data.customDeliveryAddress.get("latitude"),
-                "longitude": order_data.customDeliveryAddress.get("longitude"),
-                "isDefault": False
-            }
+        new_address = Address(
+            street=order_data.customDeliveryAddress.get("street"),
+            city=order_data.customDeliveryAddress.get("city"),
+            latitude=order_data.customDeliveryAddress.get("latitude"),
+            longitude=order_data.customDeliveryAddress.get("longitude"),
+            isDefault=False
         )
+        db.add(new_address)
+        await db.commit()
+        await db.refresh(new_address)
         delivery_address_id = new_address.id
     
     # Convert to standard OrderCreate for processing
@@ -521,29 +532,30 @@ async def get_my_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get current user's orders."""
     
-    orders = await db.order.find_many(
-        where={"userId": current_user.id},
-        include={
-            "table": True,
-            "restaurant": True,
-            "items": True,
-            "deliveryAddress": True,  # Include delivery address for orders
-            "user": True
-            }
-        ,
-        skip=skip,
-        take=limit,
-        order={"orderTime": "desc"}
+    result = await db.execute(
+        select(Order)
+        .where(Order.userId == current_user.id)
+        .options(
+            selectinload(Order.table),
+            selectinload(Order.restaurant),
+            selectinload(Order.items),
+            selectinload(Order.deliveryAddress),
+            selectinload(Order.user),
+        )
+        .offset(skip)
+        .limit(limit)
+        .order_by(Order.orderTime.desc())
     )
+    orders = result.scalars().all()
     
     # Add item count to each order
     order_list = []
     for order in orders:
-        order_dict = order.__dict__.copy()
+        order_dict = {c.name: getattr(order, c.name) for c in order.__table__.columns}
         order_dict["itemCount"] = len(order.items)
         
         # Convert user object to dict if it exists
@@ -577,19 +589,21 @@ async def get_my_orders(
 async def get_order(
     order_id: int,
     current_user = Depends(get_current_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get order by ID. Users can only see their own orders, staff can see restaurant orders."""
     
-    order = await db.order.find_unique(
-        where={"id": order_id},
-        include={
-            "items": {"include": {"dish": True}},
-            "table": True,
-            "restaurant": True,
-            "user": True,
-        }
+    result = await db.execute(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.dish),
+            selectinload(Order.table),
+            selectinload(Order.restaurant),
+            selectinload(Order.user),
+        )
     )
+    order = result.scalar_one_or_none()
 
     if not order:
         raise HTTPException(
@@ -620,7 +634,7 @@ async def get_order(
 
 
 @router.get("/public/status/{order_number}", response_model=OrderResponse)
-async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_db_session)):
+async def get_public_order_status(order_number: str, db: AsyncSession = Depends(get_db_session)):
     """
     Get order status by order number (Public endpoint for QR code orders).
     
@@ -628,15 +642,17 @@ async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_
     without authentication by using the order number they received.
     """
     
-    order = await db.order.find_unique(
-        where={"orderNumber": order_number},
-        include={
-            "items": {"include": {"dish": True}},
-            "table": True,
-            "restaurant": True,
-            "user": True
-        }
+    result = await db.execute(
+        select(Order)
+        .where(Order.orderNumber == order_number)
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.dish),
+            selectinload(Order.table),
+            selectinload(Order.restaurant),
+            selectinload(Order.user),
+        )
     )
+    order = result.scalar_one_or_none()
     
     if not order:
         raise HTTPException(
@@ -664,7 +680,7 @@ async def get_restaurant_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get orders for a restaurant (Staff only)."""
     
@@ -675,27 +691,24 @@ async def get_restaurant_orders(
             detail="You can only view orders from your own restaurant"
         )
     
-    where_clause = {"restaurantId": restaurant_id}
+    query = select(Order).where(Order.restaurantId == restaurant_id)
     if status:
-        where_clause["status"] = status.value
+        query = query.where(Order.status == status.value)
     
-    orders = await db.order.find_many(
-        where=where_clause,
-        include={
-            "table": True,
-            "restaurant": True,
-            "items": True,
-            "user": True,
-        },
-        skip=skip,
-        take=limit,
-        order={"orderTime": "desc"}
-    )
+    query = query.options(
+        selectinload(Order.table),
+        selectinload(Order.restaurant),
+        selectinload(Order.items),
+        selectinload(Order.user),
+    ).offset(skip).limit(limit).order_by(Order.orderTime.desc())
+    
+    result = await db.execute(query)
+    orders = result.scalars().all()
 
     # Add item count
     order_list = []
     for order in orders:
-        order_dict = order.__dict__.copy()
+        order_dict = {c.name: getattr(order, c.name) for c in order.__table__.columns}
         order_dict["itemCount"] = len(order.items)
 
         # Convert user object to dict if it exists
@@ -729,12 +742,12 @@ async def update_order_status(
     order_id: int,
     status_update: OrderStatusUpdate,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update order status (Staff only)."""
     
     # Check if order exists
-    order = await db.order.find_unique(where={"id": order_id})
+    order = await db.get(Order, order_id)
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -749,35 +762,37 @@ async def update_order_status(
         )
     
     # Prepare update data
-    update_data = {
-        "status": status_update.status.value,
-        "updatedAt": datetime.now()
-    }
+    order.status = status_update.status.value
+    order.updatedAt = datetime.now()
     
     if status_update.notes:
-        update_data["notes"] = status_update.notes
+        order.notes = status_update.notes
     
     # Set timestamp fields based on status
     if status_update.status == OrderStatus.CONFIRMED:
-        update_data["confirmedAt"] = datetime.now()
+        order.confirmedAt = datetime.now()
     elif status_update.status == OrderStatus.PREPARING:
-        update_data["preparedAt"] = datetime.now()
+        order.preparedAt = datetime.now()
     elif status_update.status == OrderStatus.READY:
-        update_data["readyAt"] = datetime.now()
+        order.readyAt = datetime.now()
     elif status_update.status == OrderStatus.COMPLETED:
-        update_data["completedAt"] = datetime.now()
+        order.completedAt = datetime.now()
     
     try:
-        updated_order = await db.order.update(
-            where={"id": order_id},
-            data=update_data,
-            include={
-                "items": {"include": {"dish": True}},
-                "table": True,
-                "restaurant": True,
-                "user": True,
-            }
+        await db.commit()
+        
+        # Re-fetch with eager loaded relations
+        result = await db.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(
+                selectinload(Order.items).selectinload(OrderItem.dish),
+                selectinload(Order.table),
+                selectinload(Order.restaurant),
+                selectinload(Order.user),
+            )
         )
+        updated_order = result.scalar_one()
 
         return OrderResponse.model_validate(_order_to_response_dict(updated_order))
         
@@ -792,12 +807,13 @@ async def update_order_status(
 async def get_table_current_orders(
     table_id: int,
     current_user = Depends(get_current_staff_user),
-    db: "Prisma" = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Get current orders for a specific table (Staff only)."""
     
     # Check if table exists
-    table = await db.table.find_unique(where={"id": table_id})
+    result = await db.execute(select(Table).where(Table.id == table_id))
+    table = result.scalar_one_or_none()
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -812,24 +828,26 @@ async def get_table_current_orders(
         )
     
     # Get current orders for this table
-    orders = await db.order.find_many(
-        where={
-            "tableId": table_id,
-            "status": {"in": ["PENDING", "CONFIRMED", "PREPARING", "READY"]}
-        },
-        include={
-            "table": True,
-            "restaurant": True,
-            "items": True,
-            "user": True,
-        },
-        order={"orderTime": "desc"}
+    result = await db.execute(
+        select(Order)
+        .where(and_(
+            Order.tableId == table_id,
+            Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY"])
+        ))
+        .options(
+            selectinload(Order.table),
+            selectinload(Order.restaurant),
+            selectinload(Order.items),
+            selectinload(Order.user),
+        )
+        .order_by(Order.orderTime.desc())
     )
+    orders = result.scalars().all()
     
     # Add item count
     order_list = []
     for order in orders:
-        order_dict = order.__dict__.copy()
+        order_dict = {c.name: getattr(order, c.name) for c in order.__table__.columns}
         order_dict["itemCount"] = len(order.items)
         
         # Convert user object to dict if it exists

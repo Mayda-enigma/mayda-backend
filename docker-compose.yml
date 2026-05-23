@@ -29,17 +29,17 @@ services:
       - "8001:8001"
     environment:
       - DATABASE_URL=postgresql://caravane_user:caravane_password@db:5432/caravane_db?schema=public
-      - SECRET_KEY=${SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
       - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
       - GUIDINI_APP_KEY=${GUIDINI_APP_KEY}
       - GUIDINI_API_KEY=${GUIDINI_API_KEY}
-      - SERVICE_TOKEN=${SERVICE_TOKEN:-dev-service-token-change-in-production}
-      - ENVIRONMENT=production
+      - SERVICE_TOKEN=${SERVICE_TOKEN:?SERVICE_TOKEN is required}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     depends_on:
       db:
         condition: service_healthy
@@ -49,29 +49,11 @@ services:
       - api_logs:/app/logs
     command: >
       sh -c "
-        echo 'Waiting for database...' &&
-        sleep 10 &&
         echo 'Running database migrations...' &&
-        prisma migrate deploy &&
+        alembic upgrade head &&
         echo 'Starting API server...' &&
-        uvicorn main:app --host 0.0.0.0 --port 8001
+        uvicorn main:app --host 0.0.0.0 --port 8001 --workers 4
       "
-
-  # Nginx Reverse Proxy (Optional)
-  nginx:
-    image: nginx:alpine
-    container_name: restaurant_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - api
-    networks:
-      - restaurant_network
 
 volumes:
   postgres_data:
