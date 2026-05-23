@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from datetime import datetime, timedelta
+from app.core.rate_limit import limiter
 from app.models.auth import (
     UserLogin, UserRegister, TokenResponse, RefreshTokenRequest, 
     PasswordChange, UserResponse, UserUpdate, StaffLogin, 
@@ -21,7 +22,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(user_data: UserRegister, db: "Prisma" = Depends(get_db_session)):
+@limiter.limit("5/minute", error_message="Too many registration attempts from this IP. Please wait before trying again.")
+async def register(
+    request: Request,
+    response: Response,
+    user_data: UserRegister,
+    db: "Prisma" = Depends(get_db_session),
+):
     """Register a new user."""
     
     # Check if user already exists
@@ -169,7 +176,13 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: "Prisma" = 
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(user_data: UserLogin, db: "Prisma" = Depends(get_db_session)):
+@limiter.limit("5/minute", error_message="Too many login attempts from this IP. Please wait before retrying.")
+async def login(
+    request: Request,
+    response: Response,
+    user_data: UserLogin,
+    db: "Prisma" = Depends(get_db_session),
+):
     """Authenticate regular user and return access token (customers only)."""
     
     # Find user by email or phone

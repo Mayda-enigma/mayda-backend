@@ -3,10 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 from app.core.config import settings
 from app.core.database import connect_db, disconnect_db, get_db
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai, admin, notifications, analytics,users
 from app.auth.jwt import get_password_hash
 from app.models.user import UserRole
@@ -42,6 +44,9 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Request ID middleware (added before CORS)
 app.add_middleware(RequestIdMiddleware)

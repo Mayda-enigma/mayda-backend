@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Request, Response
 from typing import List, Optional
 import uuid
 from datetime import datetime
+from app.core.rate_limit import limiter
 from app.models.order import (
     OrderCreate, OrderResponse, OrderListResponse,
     PublicOrderCreate, OrderStatusUpdate, OrderStatus, OrderType, DeliveryOrderCreate
@@ -19,7 +20,13 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 # ==================== PUBLIC ORDER ENDPOINTS (No Auth Required) ====================
 
 @router.post("/public", response_model=OrderResponse)
-async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depends(get_db_session)):
+@limiter.limit("10/minute", error_message="Too many public order attempts from this IP. Please wait before trying again.")
+async def create_public_order(
+    request: Request,
+    response: Response,
+    order_data: PublicOrderCreate,
+    db: "Prisma" = Depends(get_db_session),
+):
     """
     Create order without authentication (for walk-in customers using QR codes/NFC at tables).
     
