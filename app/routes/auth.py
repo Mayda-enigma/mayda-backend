@@ -37,7 +37,6 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_session)):
-
     existing_user = None
     if user_data.email:
         result = await db.execute(select(User).where(User.email == user_data.email))
@@ -79,7 +78,6 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_se
 
 @router.post("/staff-login", response_model=TempTokenResponse)
 async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_session)):
-
     result = await db.execute(select(User).where(User.phone == user_data.phone))
     user = result.scalar_one_or_none()
 
@@ -115,7 +113,6 @@ async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_s
 
 @router.post("/verify-otp", response_model=TokenResponse)
 async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSession = Depends(get_db_session)):
-
     payload = verify_temp_token(otp_data.tempToken, "2fa")
     if not payload:
         raise HTTPException(
@@ -154,7 +151,6 @@ async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSessio
 
 @router.post("/login", response_model=TokenResponse)
 async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db_session)):
-
     user = None
     if user_data.email:
         result = await db.execute(select(User).where(User.email == user_data.email))
@@ -191,7 +187,6 @@ async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db_session)
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(token_data: RefreshTokenRequest, db: AsyncSession = Depends(get_db_session)):
-
     payload = verify_token(token_data.refresh_token, token_type="refresh")
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -249,7 +244,6 @@ async def logout(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-
     await db.execute(
         sa_update(RefreshToken)
         .where(
@@ -266,7 +260,6 @@ async def logout(
 
 @router.post("/logout-all")
 async def logout_all(current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db_session)):
-
     await db.execute(
         sa_update(RefreshToken)
         .where(RefreshToken.userId == current_user.id, RefreshToken.isRevoked == False)
@@ -288,7 +281,6 @@ async def update_current_user(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-
     update_data = {}
 
     if user_update.email is not None:
@@ -340,7 +332,6 @@ async def change_password(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-
     if not verify_password(password_data.current_password, current_user.password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect current password")
 
@@ -366,7 +357,6 @@ async def get_all_users(
     current_user=Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-
     result = await db.execute(select(User).order_by(User.createdAt.desc()))
     users = result.scalars().all()
 
@@ -380,7 +370,6 @@ async def update_user(
     current_user=Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
