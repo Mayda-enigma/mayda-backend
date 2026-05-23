@@ -4,7 +4,7 @@ ENV HOME=/home/appuser \
     XDG_CACHE_HOME=/home/appuser/.cache \
     PRISMA_HOME_DIR=/home/appuser/.prisma \
     PRISMA_BINARY_CACHE_DIR=/home/appuser/.cache/prisma-python/binaries \
-    PRISMA_NODEENV_CACHE_DIR=/home/appuser/.cache/prisma-python/nodeenv
+    PRISMA_USE_GLOBAL_NODE=true
 
 WORKDIR /app
 
@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     && mkdir -p /home/appuser/.cache/prisma-python/binaries \
-    /home/appuser/.cache/prisma-python/nodeenv \
     /home/appuser/.cache/prisma \
     /home/appuser/.prisma \
     && rm -rf /var/lib/apt/lists/*
@@ -50,12 +49,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_CACHE_HOME=/home/appuser/.cache \
     PRISMA_HOME_DIR=/home/appuser/.prisma \
     PRISMA_BINARY_CACHE_DIR=/home/appuser/.cache/prisma-python/binaries \
-    PRISMA_NODEENV_CACHE_DIR=/home/appuser/.cache/prisma-python/nodeenv
+    PRISMA_USE_GLOBAL_NODE=true
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -67,12 +67,11 @@ COPY . .
 COPY --from=prisma /app/prisma /app/prisma
 COPY --from=prisma /prisma-artifacts/prisma-package /usr/local/lib/python3.12/site-packages/prisma
 COPY --from=prisma /home/appuser/.cache/prisma /home/appuser/.cache/prisma
-COPY --from=prisma /home/appuser/.cache/prisma-python /home/appuser/.cache/prisma-python
+COPY --from=prisma /home/appuser/.cache/prisma-python/binaries /home/appuser/.cache/prisma-python/binaries
 
 RUN addgroup --system --gid 1001 appgroup \
     && adduser --system --uid 1001 --gid 1001 --home /home/appuser appuser \
     && mkdir -p /home/appuser/.cache/prisma-python/binaries \
-    /home/appuser/.cache/prisma-python/nodeenv \
     /home/appuser/.prisma \
     && chown -R appuser:appgroup /app /home/appuser
 

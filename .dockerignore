@@ -87,5 +87,4 @@ coverage.xml
 .pytest_cache/
 
 # Prisma
-prisma/migrations/
 .prisma/

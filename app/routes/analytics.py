@@ -64,12 +64,7 @@ async def get_restaurant_orders_for_range(db: "Prisma", restaurant_id: int, time
         include={
             "items": {
                 "include": {
-                    "dish": {
-                        "select": {
-                            "id": True,
-                            "name": True,
-                        }
-                    }
+                    "dish": True,
                 }
             }
         },
@@ -146,6 +141,36 @@ async def get_kitchen_analytics(
     restaurant_id = get_user_restaurant_id(current_user)
     orders = await get_restaurant_orders_for_range(db, restaurant_id, time_range)
 
+    completed_or_active_orders = [order for order in orders if order.status != "CANCELLED"]
+    order_count = len(completed_or_active_orders)
+    revenue = round(sum(order.totalAmount for order in completed_or_active_orders), 2)
+
+    top_dishes = {}
+    for order in completed_or_active_orders:
+        for item in order.items:
+            dish_name = item.dish.name if item.dish else f"Dish {item.dishId}"
+            if item.dishId not in top_dishes:
+                top_dishes[item.dishId] = {
+                    "dishId": item.dishId,
+                    "dishName": dish_name,
+                    "quantitySold": 0,
+                    "revenue": 0.0,
+                }
+
+            top_dishes[item.dishId]["quantitySold"] += item.quantity
+            top_dishes[item.dishId]["revenue"] += item.totalPrice
+
+    top_dish_items = [
+        TopDishItem(
+            dishId=data["dishId"],
+            dishName=data["dishName"],
+            quantitySold=data["quantitySold"],
+            revenue=round(data["revenue"], 2),
+        )
+        for data in top_dishes.values()
+    ]
+    top_dish_items.sort(key=lambda item: (item.quantitySold, item.revenue), reverse=True)
+
     prep_durations = []
     late_orders = 0
     late_eligible_orders = 0
@@ -167,6 +192,9 @@ async def get_kitchen_analytics(
 
     return KitchenAnalyticsResponse(
         avgPrepMinutes=avg_prep_minutes,
-        ordersPerHour=build_hourly_metrics([order for order in orders if order.status != "CANCELLED"]),
+        ordersPerHour=build_hourly_metrics(completed_or_active_orders),
         lateOrderRate=late_order_rate,
+        orderCount=order_count,
+        revenue=revenue,
+        topDishes=top_dish_items[:5],
     )

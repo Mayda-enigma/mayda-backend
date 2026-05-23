@@ -10,6 +10,22 @@ async def main():
     
     print("🚀 Starting database seeding...")
 
+    # Clean up volatile data (orders, reviews, etc.) for idempotent re-seeding
+    await db.loyaltytransaction.delete_many()
+    await db.review.delete_many()
+    await db.orderitem.delete_many()
+    await db.order.delete_many()
+    await db.reservation.delete_many()
+    await db.ingredient.delete_many()
+    await db.promotion.delete_many()
+    await db.loyaltycard.delete_many()
+    await db.dish.delete_many()
+    await db.menucategory.delete_many()
+    await db.menu.delete_many()
+    await db.table.delete_many()
+    await db.inventory.delete_many()
+    print("🧹 Cleaned up existing orders, reviews, reservations, and dependent data")
+
     # 1. Create Multiple Restaurants (check if they exist first)
     existing_restaurants = await db.restaurant.find_many()
     if existing_restaurants:
@@ -76,6 +92,12 @@ async def main():
         print("ℹ️  Admin user already exists")
     users.append(admin)
     
+    async def find_or_create_user(email: str, data: dict):
+        existing = await db.user.find_unique(where={"email": email})
+        if existing:
+            return existing
+        return await db.user.create(data)
+
     # Create Managers for each restaurant
     manager_data = [
         {'firstName': 'John', 'lastName': 'Manager', 'email': 'john.manager@caravane.com', 'phone': 222222222},
@@ -86,8 +108,7 @@ async def main():
     
     managers = []
     for i, manager_info in enumerate(manager_data):
-        manager = await db.user.create({
-            **manager_info,
+        manager = await find_or_create_user(manager_info['email'], {**manager_info,
             'role': 'MANAGER',
             'isActive': True,
             'password': '$2b$12$cQ7.1vON3C2ez9pAZ8ooHOaUnG3MtHQ5/UVZUrdKX/AGwcWIK58MW',  # hashed 'manager123'
@@ -109,10 +130,11 @@ async def main():
     for restaurant in restaurants:
         for staff_info in staff_data:
             phone_counter += 1
-            staff = await db.user.create({
+            email = f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@caravane.com"
+            staff = await find_or_create_user(email, {
                 'firstName': staff_info['firstName'],
                 'lastName': staff_info['lastName'],
-                'email': f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@caravane.com",
+                'email': email,
                 'phone': phone_counter,
                 'role': staff_info['role'],
                 'isActive': True,
@@ -134,8 +156,7 @@ async def main():
     
     clients = []
     for client_info in client_data:
-        client = await db.user.create({
-            **client_info,
+        client = await find_or_create_user(client_info['email'], {**client_info,
             'role': 'CLIENT',
             'isActive': True,
             'password': '$2b$12$Y2z.FHPWadE4.doQbvvFe.zdCuFi7H3dIVrViIXuqOgpxZ/14c5AS'  # hashed 'client123'
@@ -143,7 +164,7 @@ async def main():
         clients.append(client)
         users.append(client)
     
-    print(f"✅ Created {len(users)} users (1 admin, 4 managers, 16 staff, {len(clients)} clients)")
+    print(f"✅ Created {len(users)} users (1 admin, {len(managers)} managers, {len(staff_members)} staff, {len(clients)} clients)")
 
     # 3. Create Addresses for clients
     addresses = []
@@ -156,13 +177,19 @@ async def main():
         {'street': '987 Elm Court', 'city': 'Hillside'},
     ]
     
+    existing_addresses = await db.address.find_many()
+    existing_user_ids = {a.userId for a in existing_addresses}
+    
     for i, client in enumerate(clients):
-        address = await db.address.create({
-            'userId': client.id,
-            'street': address_data[i]['street'],
-            'city': address_data[i]['city'],
-            'isDefault': True
-        })
+        if client.id in existing_user_ids:
+            address = existing_addresses[[a.userId for a in existing_addresses].index(client.id)]
+        else:
+            address = await db.address.create({
+                'userId': client.id,
+                'street': address_data[i]['street'],
+                'city': address_data[i]['city'],
+                'isDefault': True
+            })
         addresses.append(address)
     
     print(f"✅ Created {len(addresses)} addresses")
@@ -426,46 +453,87 @@ async def main():
     
     print(f"✅ Created {len(reservations)} reservations")
 
-    # 11. Create Orders
+    # 11. Create Orders (seeded across multiple time ranges for analytics)
     orders = []
     order_counter = 1001
-    
-    for i, client in enumerate(clients):
-        restaurant = restaurants[i % len(restaurants)]
+
+    now = datetime.now()
+
+    # Define time ranges for orders
+    time_slots = [
+        # Today (within last 24h) — shows in "day" range
+        *[now - timedelta(hours=h) for h in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]],
+        # This week (1-6 days ago) — shows in "week" range
+        *[now - timedelta(days=d, hours=random.randint(8, 20)) for d in [1, 2, 3, 4, 5, 6]],
+        # This month (7-28 days ago) — shows in "month" range
+        *[now - timedelta(days=d, hours=random.randint(8, 20)) for d in [7, 10, 14, 18, 21, 25, 28]],
+    ]
+
+    order_statuses = ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'PREPARING', 'READY', 'CONFIRMED']
+
+    for idx, order_time in enumerate(time_slots):
+        client = clients[idx % len(clients)]
+        restaurant = restaurants[idx % len(restaurants)]
         table = random.choice([t for t in all_tables if t.restaurantId == restaurant.id])
-        
+
         # Get dishes for this restaurant
         restaurant_dishes = restaurant_dish_map[restaurant.id]
-        selected_dishes = random.sample(restaurant_dishes, min(3, len(restaurant_dishes)))
-        
+        num_items = random.randint(1, 4)
+        selected_dishes = random.sample(restaurant_dishes, min(num_items, len(restaurant_dishes)))
+
         subtotal = sum(dish.price for dish in selected_dishes)
-        total_amount = subtotal + random.uniform(2, 5)  # Add some delivery fee/tax
-        
+        total_amount = round(subtotal + random.uniform(2, 8), 2)
+
+        status = random.choice(order_statuses)
+        order_type = random.choice(['DINE_IN', 'TAKEAWAY', 'DELIVERY'])
+
+        confirmed_at = order_time + timedelta(minutes=random.randint(2, 10))
+        prepared_at = None
+        ready_at = None
+        completed_at = None
+
+        prep_time_minutes = random.randint(5, 40)
+        if status in ('COMPLETED', 'READY', 'PREPARING'):
+            prepared_at = confirmed_at + timedelta(minutes=prep_time_minutes)
+        if status in ('COMPLETED', 'READY'):
+            ready_at = prepared_at + timedelta(minutes=random.randint(2, 8))
+        if status == 'COMPLETED':
+            completed_at = ready_at + timedelta(minutes=random.randint(1, 5))
+
+        delivery_est = confirmed_at + timedelta(minutes=random.randint(20, 50))
+
         order = await db.order.create({
             'orderNumber': f'ORD-{order_counter}',
             'userId': client.id,
             'restaurantId': restaurant.id,
             'tableId': table.id,
-            'type': random.choice(['DINE_IN', 'TAKEAWAY', 'DELIVERY']),
-            'status': random.choice(['COMPLETED', 'COMPLETED', 'PREPARING']),  # Weighted towards completed
+            'type': order_type,
+            'status': status,
+            'orderTime': order_time,
+            'confirmedAt': confirmed_at,
+            'preparedAt': prepared_at,
+            'readyAt': ready_at,
+            'completedAt': completed_at,
+            'estimatedDeliveryTime': delivery_est,
             'subtotal': subtotal,
             'totalAmount': total_amount,
-            'paymentStatus': 'PAID'
+            'paymentStatus': 'PAID' if status == 'COMPLETED' else random.choice(['PAID', 'PENDING']),
         })
         orders.append(order)
         order_counter += 1
-        
+
         # Create order items
         for dish in selected_dishes:
+            quantity = random.randint(1, 3)
             await db.orderitem.create({
                 'orderId': order.id,
                 'dishId': dish.id,
-                'quantity': 1,
+                'quantity': quantity,
                 'unitPrice': dish.price,
-                'totalPrice': dish.price
+                'totalPrice': round(dish.price * quantity, 2),
             })
-    
-    print(f"✅ Created {len(orders)} orders with order items")
+
+    print(f"✅ Created {len(orders)} orders with order items (seeded across day/week/month)")
 
     # 12. Create Reviews
     reviews = []

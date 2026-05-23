@@ -16,6 +16,72 @@ from app.routes.notifications import create_restaurant_event_notifications
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
+def _order_to_response_dict(order):
+    """Convert Prisma order ORM to dict for OrderResponse validation."""
+    order_dict = order.__dict__.copy()
+
+    order_dict["items"] = [
+        {
+            "id": item.id,
+            "dishId": item.dishId,
+            "quantity": item.quantity,
+            "unitPrice": item.unitPrice,
+            "totalPrice": item.totalPrice,
+            "notes": item.notes,
+            "dish": {
+                "id": item.dish.id,
+                "categoryId": item.dish.categoryId,
+                "name": item.dish.name,
+                "description": item.dish.description,
+                "price": item.dish.price,
+                "image": item.dish.image,
+                "gallery": item.dish.gallery,
+                "isAvailable": item.dish.isAvailable,
+                "quantity": item.dish.quantity,
+                "preparationTime": item.dish.preparationTime,
+                "popularity": item.dish.popularity,
+                "displayOrder": item.dish.displayOrder,
+            }
+        }
+        for item in order.items
+    ]
+
+    if order.user:
+        order_dict["user"] = {
+            "id": order.user.id,
+            "firstName": order.user.firstName,
+            "lastName": order.user.lastName,
+            "email": order.user.email,
+            "phone": order.user.phone,
+        }
+    else:
+        order_dict["user"] = None
+
+    if order.table:
+        order_dict["table"] = {
+            "id": order.table.id,
+            "number": order.table.number,
+            "capacity": order.table.capacity,
+        }
+    else:
+        order_dict["table"] = None
+
+    if order.restaurant:
+        order_dict["restaurant"] = {
+            "id": order.restaurant.id,
+            "name": order.restaurant.name,
+            "description": order.restaurant.description,
+            "phone": order.restaurant.phone,
+            "email": order.restaurant.email,
+            "website": order.restaurant.website,
+            "logo": order.restaurant.logo,
+            "coverImage": order.restaurant.coverImage,
+            "isActive": order.restaurant.isActive,
+        }
+
+    return order_dict
+
+
 # ==================== PUBLIC ORDER ENDPOINTS (No Auth Required) ====================
 
 @router.post("/public", response_model=OrderResponse)
@@ -174,13 +240,7 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
                 "items": {"include": {"dish": True}},
                 "table": True,
                 "restaurant": True,
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True
-                    }
-                }
+                "user": True,
             }
         )
 
@@ -198,7 +258,7 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
             },
         )
         
-        return OrderResponse.model_validate(complete_order)
+        return OrderResponse.model_validate(_order_to_response_dict(complete_order))
         
     except Exception as e:
         raise HTTPException(
@@ -356,16 +416,9 @@ async def create_order(
                 "items": {"include": {"dish": True}},
                 "table": True,
                 "restaurant": True,
-                "deliveryAddress": True,  # Include delivery address details
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True  # Include email for contact
-                    }
-                }
-                    }
+                "deliveryAddress": True,
+                "user": True,
+            }
         )
 
         await create_restaurant_event_notifications(
@@ -383,7 +436,7 @@ async def create_order(
             },
         )
         
-        return OrderResponse.model_validate(complete_order)
+        return OrderResponse.model_validate(_order_to_response_dict(complete_order))
         
     except Exception as e:
         raise HTTPException(
@@ -534,22 +587,16 @@ async def get_order(
             "items": {"include": {"dish": True}},
             "table": True,
             "restaurant": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True,
         }
     )
-    
+
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order not found"
         )
-    
+
     # Check permissions
     if current_user.role in ["ADMIN"]:
         # Admin can see all orders
@@ -569,7 +616,7 @@ async def get_order(
                 detail="You can only view your own orders"
             )
     
-    return OrderResponse.model_validate(order)
+    return OrderResponse.model_validate(_order_to_response_dict(order))
 
 
 @router.get("/public/status/{order_number}", response_model=OrderResponse)
@@ -584,9 +631,10 @@ async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_
     order = await db.order.find_unique(
         where={"orderNumber": order_number},
         include={
-            "items": {"include": {"dish": {"select": {"name": True, "price": True}}}},
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
+            "items": {"include": {"dish": True}},
+            "table": True,
+            "restaurant": True,
+            "user": True
         }
     )
     
@@ -604,7 +652,7 @@ async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_
             detail="Order not found"
         )
     
-    return OrderResponse.model_validate(order)
+    return OrderResponse.model_validate(_order_to_response_dict(order))
 
 
 # ==================== STAFF ORDER MANAGEMENT ====================
@@ -635,27 +683,21 @@ async def get_restaurant_orders(
         where=where_clause,
         include={
             "table": True,
-            "restaurant": {"select": {"name": True}},
+            "restaurant": True,
             "items": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True,
         },
         skip=skip,
         take=limit,
         order={"orderTime": "desc"}
     )
-    
+
     # Add item count
     order_list = []
     for order in orders:
         order_dict = order.__dict__.copy()
         order_dict["itemCount"] = len(order.items)
-        
+
         # Convert user object to dict if it exists
         if order.user:
             order_dict["user"] = {
@@ -733,17 +775,11 @@ async def update_order_status(
                 "items": {"include": {"dish": True}},
                 "table": True,
                 "restaurant": True,
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True
-                    }
-                }
+                "user": True,
             }
         )
-        
-        return OrderResponse.model_validate(updated_order)
+
+        return OrderResponse.model_validate(_order_to_response_dict(updated_order))
         
     except Exception as e:
         raise HTTPException(
@@ -783,15 +819,9 @@ async def get_table_current_orders(
         },
         include={
             "table": True,
-            "restaurant": {"select": {"name": True}},
+            "restaurant": True,
             "items": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True,
         },
         order={"orderTime": "desc"}
     )

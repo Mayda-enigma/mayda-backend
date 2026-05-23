@@ -191,14 +191,7 @@ async def login(user_data: UserLogin, db: "Prisma" = Depends(get_db_session)):
             detail="Account is inactive"
         )
     
-    # For staff users, redirect to 2FA login
-    if user.role in ["WAITER", "CHEF", "MANAGER", "ADMIN"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Staff users must use /auth/staff-login for 2FA authentication"
-        )
-    
-    # Create tokens for customer users
+    # Create tokens for users
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
     

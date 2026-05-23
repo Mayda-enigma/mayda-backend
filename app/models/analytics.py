@@ -32,3 +32,6 @@ class KitchenAnalyticsResponse(BaseModel):
     avgPrepMinutes: float
     ordersPerHour: list[HourlyMetricItem]
     lateOrderRate: float
+    orderCount: int
+    revenue: float
+    topDishes: list[TopDishItem]
