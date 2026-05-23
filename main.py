@@ -6,10 +6,8 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.core.config import settings
-from app.core.database import connect_db, disconnect_db, get_db
+from app.core.database import connect_db, disconnect_db
 from app.routes import auth, protected, restaurants, tables, menus, orders, reservations, reviews, promotions, payments, otp, loyalty, ingredients, inventory, ai
-from app.auth.jwt import get_password_hash
-from app.models.user import UserRole
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.utils.logging import logger
