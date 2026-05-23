@@ -517,7 +517,7 @@ Routes receive their DB client as a dependency, not via global lookup.
 ### ISSUE BE-015: Move hardcoded admin seed out of startup into a CLI command
 
 **Description**
-`ensure_admin_user_exists()` in `main.py` auto-creates `admin@caravane.com / admin123456` on every startup. Move to a CLI command (`python -m app.cli create-admin`) so it doesn't run unconditionally in production.
+`ensure_admin_user_exists()` in `main.py` auto-creates `admin@mayda.dz / admin123456` on every startup. Move to a CLI command (`python -m app.cli create-admin`) so it doesn't run unconditionally in production.
 
 **Goal**
 Admin user creation is explicit, not implicit.

@@ -75,7 +75,7 @@ After migrations are applied and the server is running, create the initial admin
 
 ```bash
 python -m app.cli create-admin \
-  --email admin@caravane.com \
+  --email admin@mayda.dz \
   --phone 1234567890 \
   --password <secure-password>
 ```

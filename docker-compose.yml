@@ -5,9 +5,9 @@ services:
     container_name: restaurant_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: caravane_db
-      POSTGRES_USER: caravane_user
-      POSTGRES_PASSWORD: caravane_password
+      POSTGRES_DB: mayda_db
+      POSTGRES_USER: mayda_user
+      POSTGRES_PASSWORD: mayda_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -15,7 +15,7 @@ services:
     networks:
       - restaurant_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U caravane_user -d caravane_db"]
+      test: ["CMD-SHELL", "pg_isready -U mayda_user -d mayda_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - DATABASE_URL=postgresql://caravane_user:caravane_password@db:5432/caravane_db
+      - DATABASE_URL=postgresql://mayda_user:mayda_password@db:5432/mayda_db
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-30}

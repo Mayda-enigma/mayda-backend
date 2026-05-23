@@ -326,7 +326,7 @@ async def invite_restaurant_staff(
     active_sms_service = sms_service or SMSService()
     invite_message = (
         f"You have been invited to join {restaurant.name} as {staff_data.role.value}. "
-        f"Temporary password: {temporary_password}. Use staff login to access Caravane."
+        f"Temporary password: {temporary_password}. Use staff login to access Mayda."
     )
     sms_result = active_sms_service.send_sms(str(staff_data.phone), invite_message)
 

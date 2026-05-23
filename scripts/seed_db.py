@@ -77,9 +77,9 @@ async def main():
         else:
             restaurants_data = [
                 {
-                    "name": "Caravane Downtown",
+                    "name": "Mayda Downtown",
                     "phone": "0123456789",
-                    "email": "downtown@caravane.com",
+                    "email": "downtown@mayda.dz",
                     "operatingHours": json.dumps(
                         {
                             "monday": "08:00-23:00",
@@ -94,9 +94,9 @@ async def main():
                     "description": "Trendy downtown location with modern international cuisine and craft cocktails.",
                 },
                 {
-                    "name": "Caravane Beachside",
+                    "name": "Mayda Beachside",
                     "phone": "0987654321",
-                    "email": "beachside@caravane.com",
+                    "email": "beachside@mayda.dz",
                     "operatingHours": json.dumps(
                         {
                             "monday": "07:00-24:00",
@@ -111,9 +111,9 @@ async def main():
                     "description": "Oceanfront dining with fresh seafood and Mediterranean flavors.",
                 },
                 {
-                    "name": "Caravane Gardens",
+                    "name": "Mayda Gardens",
                     "phone": "0555123456",
-                    "email": "gardens@caravane.com",
+                    "email": "gardens@mayda.dz",
                     "operatingHours": json.dumps(
                         {
                             "monday": "09:00-22:00",
@@ -128,9 +128,9 @@ async def main():
                     "description": "Garden-to-table restaurant focusing on organic, locally sourced ingredients.",
                 },
                 {
-                    "name": "Caravane Rooftop",
+                    "name": "Mayda Rooftop",
                     "phone": "0444567890",
-                    "email": "rooftop@caravane.com",
+                    "email": "rooftop@mayda.dz",
                     "operatingHours": json.dumps(
                         {
                             "monday": "17:00-02:00",
@@ -159,11 +159,11 @@ async def main():
         users = []
 
         # Check if admin already exists, if not create one
-        result = await db.execute(select(User).where(User.email == "admin@caravane.com"))
+        result = await db.execute(select(User).where(User.email == "admin@mayda.dz"))
         admin = result.scalar_one_or_none()
         if not admin:
             admin = User(
-                email="admin@caravane.com",
+                email="admin@mayda.dz",
                 phone=111111111,
                 firstName="System",
                 lastName="Administrator",
@@ -184,25 +184,25 @@ async def main():
             {
                 "firstName": "John",
                 "lastName": "Manager",
-                "email": "john.manager@caravane.com",
+                "email": "john.manager@mayda.dz",
                 "phone": 222222222,
             },
             {
                 "firstName": "Sarah",
                 "lastName": "Wilson",
-                "email": "sarah.wilson@caravane.com",
+                "email": "sarah.wilson@mayda.dz",
                 "phone": 222222223,
             },
             {
                 "firstName": "Mike",
                 "lastName": "Johnson",
-                "email": "mike.johnson@caravane.com",
+                "email": "mike.johnson@mayda.dz",
                 "phone": 222222224,
             },
             {
                 "firstName": "Lisa",
                 "lastName": "Brown",
-                "email": "lisa.brown@caravane.com",
+                "email": "lisa.brown@mayda.dz",
                 "phone": 222222225,
             },
         ]
@@ -237,7 +237,7 @@ async def main():
             for staff_info in staff_data:
                 phone_counter += 1
                 email = (
-                    f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@caravane.com"  # noqa: E501
+                    f"{staff_info['firstName'].lower()}.{staff_info['lastName'].lower()}.{restaurant.id}@mayda.dz"  # noqa: E501
                 )
                 staff = await find_or_create_user(
                     db,

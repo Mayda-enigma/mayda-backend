@@ -2,14 +2,14 @@
 """
 Admin User Creation Script
 
-This script creates an admin user for testing the Caravane API.
+This script creates an admin user for testing the Mayda API.
 Run this script after setting up the database and running migrations.
 
 Usage:
     python create_admin_simple.py
 
 Or with custom values:
-    python create_admin_simple.py --email admin@caravane.com --phone 1234567890 --password mypassword
+    python create_admin_simple.py --email admin@mayda.dz --phone 1234567890 --password mypassword
 """
 
 import argparse
@@ -84,8 +84,8 @@ async def create_admin_user(email: str, phone: int, first_name: str, last_name: 
 
 async def main():
     """Main function to handle command line arguments and create admin user."""
-    parser = argparse.ArgumentParser(description="Create an admin user for Caravane API")
-    parser.add_argument("--email", default="admin@caravane.com", help="Admin email address")
+    parser = argparse.ArgumentParser(description="Create an admin user for Mayda API")
+    parser.add_argument("--email", default="admin@mayda.dz", help="Admin email address")
     parser.add_argument("--phone", type=int, default=1234567890, help="Admin phone number")
     parser.add_argument("--first-name", default="Admin", help="Admin first name")
     parser.add_argument("--last-name", default="User", help="Admin last name")
@@ -98,7 +98,7 @@ async def main():
         logger.error("Password must be at least 6 characters long!")
         return
 
-    logger.info("Creating admin user for Caravane API...")
+    logger.info("Creating admin user for Mayda API...")
     logger.info("Email: {}", args.email)
     logger.info("Phone: {}", args.phone)
     logger.info("Name: {} {}", args.first_name, args.last_name)

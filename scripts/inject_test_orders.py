@@ -57,7 +57,7 @@ async def inject_test_orders():
 
             if not test_user:
                 test_user = User(
-                    email="testclient@caravane.com",
+                    email="testclient@mayda.dz",
                     phone=1234567899,
                     firstName="Test",
                     lastName="Client",

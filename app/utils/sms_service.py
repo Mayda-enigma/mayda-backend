@@ -128,7 +128,7 @@ class SMSService:
             logger.debug("Generated OTP for user {}: {}", user_id, otp_code)
 
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=20)
-            message = f"Your Caravane verification code is: {otp_code}. Valid for 20 minutes."
+            message = f"Your Mayda verification code is: {otp_code}. Valid for 20 minutes."
             sms_result = self.send_sms(str(phone), message)
             logger.debug("SMS send result: {}", sms_result)
 

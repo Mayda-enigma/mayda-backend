@@ -40,12 +40,12 @@ async def _ensure_admin():
     """Create default admin on startup if it doesn't exist yet."""
     try:
         db = await get_db()
-        result = await db.execute(select(User).where(User.email == "admin@caravane.com"))
+        result = await db.execute(select(User).where(User.email == "admin@mayda.dz"))
         existing = result.scalar_one_or_none()
         if not existing:
             hashed = get_password_hash("admin123456")
             admin = User(
-                email="admin@caravane.com",
+                email="admin@mayda.dz",
                 phone=1234567890,
                 firstName="Admin",
                 lastName="User",
@@ -56,7 +56,7 @@ async def _ensure_admin():
             db.add(admin)
             await db.commit()
             await db.refresh(admin)
-            logger.info("Default admin created: admin@caravane.com / admin123456")
+            logger.info("Default admin created: admin@mayda.dz / admin123456")
         else:
             logger.debug("Default admin already exists, skipping")
         await db.close()
@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Caravane Restaurant Management API",
+    title="Mayda Restaurant Management API",
     description="JWT Authentication with Role-Based Access Control",
     version="1.0.0",
     docs_url="/docs",
@@ -139,7 +139,7 @@ app.include_router(analytics.router, prefix="/api")
 async def health_check():
     return {
         "status": "healthy",
-        "message": "Caravane API is running",
+        "message": "Mayda API is running",
         "version": "1.0.0",
     }
 
@@ -147,7 +147,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Caravane Restaurant Management API",
+        "message": "Welcome to Mayda Restaurant Management API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",
