@@ -9,7 +9,7 @@ Issue ID prefix: `BE-` (backend)
 ### ISSUE BE-001: Initialize `mayda-backend` repo from `API_Orchestration/`
 
 **Description**
-The folder is already a git repository with full history. Push it as the new `mayda-backend` repo under the `mayda` organization, update metadata, and add a proper README documenting the FastAPI + Prisma stack.
+The folder is already a git repository with full history. Push it as the new `mayda-backend` repo under the `mayda` organization, update metadata, and add a proper README documenting the FastAPI + SQLAlchemy stack.
 
 **Goal**
 Repo exists on GitHub with the existing codebase + commit history intact.
@@ -17,7 +17,7 @@ Repo exists on GitHub with the existing codebase + commit history intact.
 **Targeted Files**
 - All of `API_Orchestration/` (push as-is)
 - `README.md` (overwrite)
-- `.gitignore` (verify Python + Prisma defaults)
+- `.gitignore` (verify Python defaults)
 
 **Tasks**
 - [ ] Verify existing `.git/` is clean — `git status` in `API_Orchestration/`
@@ -25,11 +25,11 @@ Repo exists on GitHub with the existing codebase + commit history intact.
 - [ ] `git remote add origin git@github.com:mayda/mayda-backend.git`
 - [ ] `git push -u origin main`
 - [ ] Rewrite `README.md` with stack, dev commands, env-var checklist
-- [ ] Verify `.gitignore` excludes `__pycache__/`, `.env`, `*.pyc`, `prisma/migrations/*/migration.sql` if needed
+- [ ] Verify `.gitignore` excludes `__pycache__/`, `.env`, `*.pyc`, `alembic/versions/` if needed
 
 **Acceptance Criteria**
 - Repo accessible at `https://github.com/mayda/mayda-backend`
-- `git clone && cp .env.example .env && pip install -r requirements.txt && prisma generate` works
+- `git clone && cp .env.example .env && pip install -r requirements.txt && alembic upgrade head` works
 - README documents the dev startup sequence
 
 **References**
@@ -477,7 +477,7 @@ No deprecation warnings on startup; cleaner pattern.
 ### ISSUE BE-014: Convert `get_db()` to FastAPI dependency
 
 **Description**
-115 routes currently call `db = get_db()` directly — a global singleton lookup. Convert to a FastAPI dependency `db: Prisma = Depends(get_db_session)` so we can test with overrides + scope sessions per request later.
+115 routes currently call `db = get_db()` directly — a global singleton lookup. Convert to a FastAPI dependency \`db = Depends(get_db_session)\` so we can test with overrides + scope sessions per request later.
 
 **Goal**
 Routes receive their DB client as a dependency, not via global lookup.
@@ -571,7 +571,7 @@ Manager + chef dashboards show live KPIs.
 - [ ] Add `GET /restaurant?range=day|week|month`: manager-only, returns `{revenue, orderCount, avgOrderValue, topDishes, hourlyHeatmap}`
 - [ ] Add `GET /kitchen?range=…`: staff-only, returns `{avgPrepMinutes, ordersPerHour, lateOrderRate}`
 - [ ] Pydantic models for both responses
-- [ ] Use Prisma aggregations + raw queries where needed
+- [ ] Use SQLAlchemy aggregations + raw queries where needed
 - [ ] Register in `main.py`
 
 **Acceptance Criteria**
@@ -581,7 +581,7 @@ Manager + chef dashboards show live KPIs.
 
 **References**
 - Frontend issues MG-005, CH-007
-- Existing model: [Order schema](API_Orchestration/prisma/schema.prisma)
+- Existing model: [Order model](API_Orchestration/app/models/sqlalchemy_models.py)
 
 **Blocked By**
 - BE-014
@@ -599,23 +599,23 @@ Super-admin dashboard, analytics, and settings pages all wire-ready.
 **Targeted Files**
 - `app/routes/admin.py` (new)
 - `app/models/admin.py` (new)
-- `prisma/schema.prisma` (add `PlatformSettings` model)
+- \`app/models/sqlalchemy_models.py\` (add \`PlatformSettings\` model)
 - `main.py` (register router)
 
 **Tasks**
-- [ ] Create `prisma/schema.prisma` model:
-  ```prisma
-  model PlatformSettings {
-    id          Int @id @default(1)
-    currency    String @default("USD")
-    timezone    String @default("UTC")
-    defaultOperatingHours Json
-    featureFlags Json @default("{}")
-    updatedAt   DateTime @updatedAt
-    @@map("platform_settings")
-  }
-  ```
-- [ ] `prisma migrate dev --name add_platform_settings`
+- [ ] Create SQLAlchemy model in \`app/models/sqlalchemy_models.py\`:
+  \`\`\`python
+  class PlatformSettings(Base):
+      __tablename__ = "platform_settings"
+
+      id = Column(Integer, primary_key=True, default=1)
+      currency = Column(String, default="USD")
+      timezone = Column(String, default="UTC")
+      default_operating_hours = Column(JSON)
+      feature_flags = Column(JSON, default={})
+      updated_at = Column(DateTime, onupdate=datetime.utcnow)
+  \`\`\`
+- [ ] \`alembic revision --autogenerate -m "add_platform_settings"\`
 - [ ] `GET /stats`: admin-only, returns `{totalRestaurants, totalOrdersToday, revenueToday, activeUsers, recentActivity}`
 - [ ] `GET /analytics?range=…`: admin-only, cross-restaurant aggregates
 - [ ] `GET /settings`, `PUT /settings`: admin-only, single-row CRUD
@@ -676,29 +676,30 @@ In-app notification feed for manager (MG-010) and admin. Requires a new `Notific
 Users have a notification inbox driven by backend events.
 
 **Targeted Files**
-- `prisma/schema.prisma` (add `Notification` model)
-- `app/routes/notifications.py` (new)
+- \`app/models/sqlalchemy_models.py\` (add \`Notification\` model)
+- \`app/routes/notifications.py\` (new)
 - `app/models/notification.py` (new)
 - Existing routes that should emit notifications (`orders.py`, `reservations.py`)
 
 **Tasks**
-- [ ] Add Prisma model:
-  ```prisma
-  model Notification {
-    id        Int @id @default(autoincrement())
-    userId    Int
-    user      User @relation(fields: [userId], references: [id])
-    type      String   // "order_placed" | "low_stock" | "reservation"
-    title     String
-    body      String
-    metadata  Json?
-    isRead    Boolean @default(false)
-    createdAt DateTime @default(now())
-    @@index([userId, isRead])
-    @@map("notifications")
-  }
-  ```
-- [ ] Migrate
+- [ ] Add SQLAlchemy model:
+  \`\`\`python
+  class Notification(Base):
+      __tablename__ = "notifications"
+
+      id = Column(Integer, primary_key=True)
+      user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+      type = Column(String, nullable=False)
+      title = Column(String, nullable=False)
+      body = Column(String, nullable=False)
+      metadata_ = Column("metadata", JSON, nullable=True)
+      is_read = Column(Boolean, default=False)
+      created_at = Column(DateTime, default=datetime.utcnow)
+
+      user = relationship("User", back_populates="notifications")
+      __table_args__ = (Index("ix_notifications_user_read", "user_id", "is_read"),)
+  \`\`\`
+- [ ] Run migration
 - [ ] `GET /notifications?unreadOnly=…`: returns user's notifications
 - [ ] `PATCH /notifications/{id}/read`: marks one read
 - [ ] `POST /notifications/read-all`: marks all read
@@ -760,24 +761,25 @@ Mobile app (MB-010) registers Expo push tokens. Need a model to store and a rout
 Mobile clients register their push token; backend can send notifications later.
 
 **Targeted Files**
-- `prisma/schema.prisma` (add `PushToken` model)
+- \`app/models/sqlalchemy_models.py\` (add \`PushToken\` model)
 - `app/routes/auth.py` (append) OR new `app/routes/users.py`
 - `app/models/user.py` (append)
 
 **Tasks**
-- [ ] Add Prisma model:
-  ```prisma
-  model PushToken {
-    id        Int @id @default(autoincrement())
-    userId    Int
-    user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-    token     String @unique
-    platform  String   // "ios" | "android"
-    createdAt DateTime @default(now())
-    @@map("push_tokens")
-  }
-  ```
-- [ ] Migrate
+- [ ] Add SQLAlchemy model:
+  \`\`\`python
+  class PushToken(Base):
+      __tablename__ = "push_tokens"
+
+      id = Column(Integer, primary_key=True)
+      user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+      token = Column(String, unique=True, nullable=False)
+      platform = Column(String, nullable=False)
+      created_at = Column(DateTime, default=datetime.utcnow)
+
+      user = relationship("User", back_populates="push_tokens")
+  \`\`\`
+- [ ] Run migration
 - [ ] `POST /users/me/push-token`: authed, upserts token (delete-then-insert if token exists for another user)
 - [ ] `DELETE /users/me/push-token/{token}`: removes on logout
 
@@ -1037,52 +1039,29 @@ Run `pytest` and get a green bar across the 8 most-critical endpoints.
 
 # 🐳 Phase 8 — Infrastructure
 
-### ISSUE BE-029: Convert Dockerfile to multi-stage build
+### ISSUE BE-029: Simplify Dockerfile to single-stage slim build
 
 **Description**
-Current Dockerfile installs Node.js + Prisma CLI globally just to generate the Python Prisma client at build time — adds ~200MB to the final image. Use multi-stage: stage 1 generates Prisma artifacts with Node, stage 2 is a slim Python image.
+The Dockerfile previously included a multi-stage build with Node.js for ORM client generation. Since the migration to SQLAlchemy, a single-stage Python slim build is sufficient.
 
 **Goal**
-Final image is Python-only, ~200MB smaller.
+Clean, slim Docker image with a single Python stage.
 
 **Targeted Files**
 - `Dockerfile`
 
 **Tasks**
-- [ ] Multi-stage:
-  ```dockerfile
-  # Stage 1: Prisma client generation
-  FROM node:20-alpine AS prisma
-  WORKDIR /app
-  COPY prisma ./prisma
-  COPY requirements.txt .
-  RUN apk add --no-cache python3 py3-pip && \
-      pip install --break-system-packages prisma && \
-      npm install -g prisma && \
-      prisma generate --schema=./prisma/schema.prisma
-
-  # Stage 2: Runtime
-  FROM python:3.12-slim
-  WORKDIR /app
-  COPY requirements.txt .
-  RUN pip install --no-cache-dir -r requirements.txt
-  COPY --from=prisma /app/prisma /app/prisma
-  COPY --from=prisma /root/.cache/prisma-python /root/.cache/prisma-python
-  COPY . .
-  EXPOSE 8001
-  CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
-  ```
-- [ ] Verify Prisma client generates correctly in stage 1
-- [ ] Verify runtime image starts without Node.js
-- [ ] Compare image sizes before/after
+- [ ] Verify Dockerfile uses \`python:3.12-slim\` base image
+- [ ] Ensure \`pip install -r requirements.txt\` is the only build step
+- [ ] Verify image builds and app starts correctly
 
 **Acceptance Criteria**
-- `docker images` shows runtime image at least 150MB smaller
-- App starts and serves requests
-- Prisma queries work in container
+- \`docker build\` succeeds without Node.js
+- Image starts and serves requests
+- Database queries work in container
 
 **References**
-- AUDIT.md → "Dockerfile bloated by Node.js for Prisma CLI"
+- AUDIT.md → "Dockerfile bloated by Node.js for ORM CLI"
 - Current: [Dockerfile](API_Orchestration/Dockerfile)
 
 **Blocked By**

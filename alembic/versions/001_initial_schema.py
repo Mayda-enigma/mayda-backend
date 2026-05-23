@@ -1,4 +1,4 @@
-"""Initial database schema matching prisma migrations.
+"""Initial database schema.
 
 Revision ID: 001
 Revises:
