@@ -388,6 +388,15 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+model PlatformSettings {
+  id                    Int      @id @default(1)
+  currency              String   @default("USD")
+  timezone              String   @default("UTC")
+  defaultOperatingHours Json
+  featureFlags          Json     @default("{}")
+  updatedAt             DateTime @updatedAt
+
+  @@map("platform_settings")
 }
 
 model OtpCode {

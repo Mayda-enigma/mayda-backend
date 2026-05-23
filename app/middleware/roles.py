@@ -43,3 +43,16 @@ async def get_current_admin_user(current_user = Depends(get_current_user)):
             detail="Admin access required"
         )
     return current_user
+
+
+async def require_restaurant_staff(
+    restaurant_id: int,
+    current_user=Depends(get_current_manager_or_admin),
+):
+    """Ensure manager/admin access is scoped to the requested restaurant."""
+    if current_user.role != UserRole.ADMIN and current_user.restaurantId != restaurant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage staff for your own restaurant"
+        )
+    return current_user
