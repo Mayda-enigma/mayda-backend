@@ -114,6 +114,7 @@ async def client(mock_db: MagicMock):
     with (
         patch("app.core.database.connect_db", new_callable=AsyncMock),
         patch("app.core.database.disconnect_db", new_callable=AsyncMock),
+        patch("app.middleware.auth.get_db", return_value=mock_db),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
