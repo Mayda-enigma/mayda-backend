@@ -2,8 +2,9 @@ import random
 import string
 from datetime import datetime, timedelta
 from typing import Optional
-from twilio.rest import Client
+
 from twilio.base.exceptions import TwilioException
+from twilio.rest import Client
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -17,7 +18,7 @@ class SMSService:
         self.account_sid = settings.TWILIO_ACCOUNT_SID
         self.auth_token = settings.TWILIO_AUTH_TOKEN
         self.phone_number = settings.TWILIO_PHONE_NUMBER
-        self.environment = getattr(settings, 'ENVIRONMENT', 'development')
+        self.environment = getattr(settings, "ENVIRONMENT", "development")
 
         logger.debug("SMS Service initializing...")
         logger.debug("Environment: {}", self.environment)
@@ -35,47 +36,86 @@ class SMSService:
                 logger.error("Failed to initialize Twilio client: {}", e)
                 self.client = None
         else:
-            logger.warning("Missing Twilio credentials — SMS will be simulated")
+            logger.warning("Missing Twilio credentials - SMS will be simulated")
             self.client = None
 
-    def send_sms(self, to_phone: str, message: str) -> bool:
-        """Send SMS message to a phone number."""
+    def _format_phone_number(self, to_phone: str) -> str:
+        """Format local phone numbers for Twilio delivery."""
+        if to_phone.startswith("+"):
+            return to_phone
+        if to_phone.startswith("213"):
+            return f"+{to_phone}"
+        if to_phone.startswith("0"):
+            return f"+213{to_phone[1:]}"
+        return f"+213{to_phone}"
+
+    def send_sms(self, to_phone: str, message: str) -> dict:
+        """Send SMS message using Twilio and return a detailed result."""
         try:
             logger.debug("Attempting to send SMS to: {}", to_phone)
-            logger.debug("Client available: {}", self.client is not None)
+            formatted_phone = self._format_phone_number(to_phone)
+            logger.debug("Formatted phone: {} -> {}", to_phone, formatted_phone)
 
             if self.client:
-                if not to_phone.startswith('+'):
-                    formatted_phone = f"+213{to_phone.lstrip('0')}"
-                    logger.debug("Formatted phone: {} -> {}", to_phone, formatted_phone)
-                    to_phone = formatted_phone
-
-                logger.info("Sending SMS via Twilio to {}", to_phone)
+                logger.info("Sending SMS via Twilio to {}", formatted_phone)
 
                 sms_message = self.client.messages.create(
                     body=message,
                     from_=self.phone_number,
-                    to=to_phone
+                    to=formatted_phone,
                 )
 
-                logger.info("SMS sent successfully. SID: {}", sms_message.sid)
-                return True
-            else:
-                logger.info("[SIMULATED] SMS to {}: {}", to_phone, message)
-                return True
+                result = {
+                    "success": True,
+                    "sid": sms_message.sid,
+                    "status": sms_message.status,
+                    "to": sms_message.to,
+                    "from": sms_message.from_,
+                    "body": sms_message.body,
+                    "error_code": sms_message.error_code,
+                    "error_message": sms_message.error_message,
+                    "price": getattr(sms_message, "price", None),
+                    "price_unit": getattr(sms_message, "price_unit", None),
+                }
+                logger.info("SMS sent successfully: {}", result)
+                return result
+
+            result = {
+                "success": True,
+                "simulated": True,
+                "to": formatted_phone,
+                "from": self.phone_number,
+                "body": message,
+            }
+            logger.info("Simulated SMS send: {}", result)
+            return result
 
         except TwilioException as e:
-            logger.error("Twilio error: {}", e)
-            return False
+            result = {
+                "success": False,
+                "error_type": "TwilioException",
+                "error_code": getattr(e, "code", "unknown"),
+                "error_message": str(e),
+                "details": getattr(e, "details", None),
+                "more_info": getattr(e, "more_info", None),
+            }
+            logger.error("Twilio error: {}", result)
+            return result
         except Exception as e:
-            logger.error("SMS sending error: {}", e)
-            return False
+            result = {
+                "success": False,
+                "error_type": "Exception",
+                "error_message": str(e),
+                "error_class": e.__class__.__name__,
+            }
+            logger.error("SMS sending error: {}", result)
+            return result
 
     def generate_otp_code(self, length: int = 6) -> str:
         """Generate a random OTP code."""
-        return ''.join(random.choices(string.digits, k=length))
+        return "".join(random.choices(string.digits, k=length))
 
-    async def send_otp(self, user_id: int, phone: str, purpose: str = "STAFF_AUTH") -> bool:
+    async def send_otp(self, user_id: int, phone: str, purpose: str = "STAFF_AUTH") -> dict:
         """Generate and send OTP code to user."""
         logger.debug("send_otp called: user_id={}, phone={}, purpose={}", user_id, phone, purpose)
 
@@ -86,24 +126,26 @@ class SMSService:
             logger.debug("Generated OTP for user {}: {}", user_id, otp_code)
 
             expires_at = datetime.utcnow() + timedelta(minutes=20)
-
             message = f"Your Caravane verification code is: {otp_code}. Valid for 20 minutes."
-            logger.debug("Sending OTP SMS...")
-            result = self.send_sms(str(phone), message)
-            logger.debug("SMS send result: {}", result)
+            sms_result = self.send_sms(str(phone), message)
+            logger.debug("SMS send result: {}", sms_result)
 
-            if not result:
+            if not sms_result.get("success", False):
                 logger.error("Failed to send OTP SMS to user {}", user_id)
-                return False
+                return {
+                    "success": False,
+                    "error": "Failed to send SMS",
+                    "sms_details": sms_result,
+                }
 
             try:
                 await db.otpcode.update_many(
                     where={
                         "userId": user_id,
                         "purpose": purpose,
-                        "isUsed": False
+                        "isUsed": False,
                     },
-                    data={"isUsed": True}
+                    data={"isUsed": True},
                 )
 
                 otp_record = await db.otpcode.create(
@@ -111,22 +153,30 @@ class SMSService:
                         "userId": user_id,
                         "code": otp_code,
                         "purpose": purpose,
-                        "expiresAt": expires_at
+                        "expiresAt": expires_at,
                     }
                 )
                 logger.info("OTP saved to database with ID: {}", otp_record.id)
             except Exception as db_error:
                 logger.warning("Could not save OTP to database: {}", db_error)
 
-            return True
+            return {
+                "success": True,
+                "otp_code": otp_code,
+                "sms_details": sms_result,
+            }
 
         except Exception as e:
             logger.error("Error sending OTP: {}", e)
-            return False
+            return {
+                "success": False,
+                "error": f"Error sending OTP: {e}",
+                "error_type": e.__class__.__name__,
+            }
 
     async def verify_otp(self, user_id: int, code: str, purpose: str = "STAFF_AUTH") -> bool:
         """Verify OTP code for user."""
-        if self.environment == 'development' and code == "123456":
+        if self.environment == "development" and code == "123456":
             logger.debug("[DEVELOPMENT] Accepting hardcoded OTP for user {}", user_id)
             return True
 
@@ -139,14 +189,14 @@ class SMSService:
                     "code": code,
                     "purpose": purpose,
                     "isUsed": False,
-                    "expiresAt": {"gt": datetime.utcnow()}
+                    "expiresAt": {"gt": datetime.utcnow()},
                 }
             )
 
             if otp_record:
                 await db.otpcode.update(
                     where={"id": otp_record.id},
-                    data={"isUsed": True}
+                    data={"isUsed": True},
                 )
                 return True
 
@@ -154,8 +204,8 @@ class SMSService:
 
         except Exception as e:
             logger.error("Error verifying OTP: {}", e)
-            if self.environment == 'development':
-                logger.debug("[DEVELOPMENT] Database error — checking for hardcoded OTP")
+            if self.environment == "development":
+                logger.debug("[DEVELOPMENT] Database error - checking for hardcoded OTP")
                 return code == "123456"
             return False
 
@@ -165,7 +215,7 @@ def get_sms_service() -> Optional[SMSService]:
     try:
         return SMSService()
     except ValueError:
-        logger.warning("SMS service not available — Twilio not configured")
+        logger.warning("SMS service not available - Twilio not configured")
         return None
 
 

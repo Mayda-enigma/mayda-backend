@@ -9,7 +9,7 @@ from app.auth.jwt import (
     verify_password, get_password_hash, create_access_token, 
     create_refresh_token, verify_token, create_temp_token, verify_temp_token
 )
-from app.utils.sms_service_debug import SMSService
+from app.utils.sms_service import SMSService
 from app.core.config import settings
 from app.core.database import get_db_session
 from app.middleware.roles import (
