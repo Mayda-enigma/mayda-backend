@@ -25,6 +25,7 @@ model User {
   loyaltyCard  LoyaltyCard?
   address      Address? 
   reservations Reservation[]
+  notifications Notification[]
   refreshTokens RefreshToken[]
   otpCodes     OtpCode[]
   @@map("users")
@@ -372,6 +373,21 @@ model Payments {
   createdAt         DateTime @default(now())
   
   @@map("payments")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
 }
 
 model OtpCode {
