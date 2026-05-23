@@ -15,12 +15,6 @@ class InventoryItemCreate(BaseModel):
     supplier: Optional[str] = Field(None, max_length=100)
     location: Optional[str] = Field(None, max_length=100)  # Storage location
     expiryDate: Optional[datetime] = None
-    
-    @validator('minimumStock')
-    def validate_minimum_stock(cls, v, values):
-        if 'currentStock' in values and v > values['currentStock']:
-            raise ValueError('Minimum stock cannot be greater than current stock')
-        return v
 
 
 class InventoryItemUpdate(BaseModel):
