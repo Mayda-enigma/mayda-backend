@@ -16,6 +16,25 @@ from app.middleware.roles import (
 router = APIRouter(prefix="/inventory", tags=["Inventory Management"])
 
 
+def inventory_response_data(item) -> dict:
+    item_dict = item.model_dump() if hasattr(item, "model_dump") else item.__dict__.copy()
+    unit_price = item_dict.get("unitPrice")
+    if unit_price is None:
+        unit_price = item_dict.get("unitCost") or 0
+    minimum_stock = item_dict.get("minimumStock")
+    if minimum_stock is None:
+        minimum_stock = item_dict.get("minStock") or 0
+
+    item_dict["name"] = item_dict.get("name") or item_dict.get("itemName")
+    item_dict["category"] = item_dict.get("category") or "Uncategorized"
+    item_dict["minimumStock"] = minimum_stock
+    item_dict["unitPrice"] = unit_price
+    item_dict["isActive"] = item_dict.get("isActive", True)
+    item_dict["totalValue"] = item.currentStock * unit_price
+    item_dict["isLowStock"] = item.currentStock <= minimum_stock
+    return item_dict
+
+
 # ==================== INVENTORY ITEMS CRUD ====================
 
 @router.post("/items", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
@@ -73,30 +92,25 @@ async def create_inventory_item(
         inventory_item = await db.inventory.create(
             data={
                 "restaurantId": item_data.restaurantId,
+                "itemName": item_data.name,
                 "name": item_data.name,
                 "description": item_data.description,
                 "category": item_data.category,
                 "unit": item_data.unit,
                 "currentStock": item_data.currentStock,
+                "minStock": item_data.minimumStock,
                 "minimumStock": item_data.minimumStock,
+                "unitCost": item_data.unitPrice,
                 "unitPrice": item_data.unitPrice,
                 "supplier": item_data.supplier,
                 "location": item_data.location,
                 "expiryDate": item_data.expiryDate
             },
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
-            }
+            include={"restaurant": True}
         )
         
-        # Format response
-        item_dict = inventory_item.__dict__.copy()
+        item_dict = inventory_response_data(inventory_item)
         item_dict["totalValue"] = total_value
-        item_dict["isLowStock"] = item_data.currentStock <= item_data.minimumStock
         
         return InventoryItemResponse.model_validate(item_dict)
         
@@ -156,13 +170,7 @@ async def get_inventory_items(
     try:
         inventory_items = await db.inventory.find_many(
             where=where_clause,
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
-            },
+            include={"restaurant": True},
             skip=skip,
             take=limit,
             order={"name": "asc"}
@@ -171,9 +179,7 @@ async def get_inventory_items(
         # Format response and apply low stock filter if needed
         result = []
         for item in inventory_items:
-            item_dict = item.__dict__.copy()
-            item_dict["totalValue"] = item.currentStock * item.unitPrice
-            item_dict["isLowStock"] = item.currentStock <= item.minimumStock
+            item_dict = inventory_response_data(item)
             
             # Apply low stock filter
             if low_stock_only and not item_dict["isLowStock"]:
@@ -201,13 +207,7 @@ async def get_inventory_item(
     # Get inventory item
     inventory_item = await db.inventory.find_unique(
         where={"id": item_id},
-        include={
-            "restaurant": {
-                "select": {
-                    "name": True
-                }
-            }
-        }
+        include={"restaurant": True}
     )
     
     if not inventory_item:
@@ -224,9 +224,7 @@ async def get_inventory_item(
         )
     
     # Format response
-    item_dict = inventory_item.__dict__.copy()
-    item_dict["totalValue"] = inventory_item.currentStock * inventory_item.unitPrice
-    item_dict["isLowStock"] = inventory_item.currentStock <= inventory_item.minimumStock
+    item_dict = inventory_response_data(inventory_item)
     
     return InventoryItemResponse.model_validate(item_dict)
 
@@ -270,6 +268,12 @@ async def update_inventory_item(
     for field, value in item_data.model_dump(exclude_unset=True).items():
         if value is not None:
             update_data[field] = value
+            if field == "name":
+                update_data["itemName"] = value
+            if field == "minimumStock":
+                update_data["minStock"] = value
+            if field == "unitPrice":
+                update_data["unitCost"] = value
     
     if not update_data:
         raise HTTPException(
@@ -282,19 +286,10 @@ async def update_inventory_item(
         updated_item = await db.inventory.update(
             where={"id": item_id},
             data=update_data,
-            include={
-                "restaurant": {
-                    "select": {
-                        "name": True
-                    }
-                }
-            }
+            include={"restaurant": True}
         )
         
-        # Format response
-        item_dict = updated_item.__dict__.copy()
-        item_dict["totalValue"] = updated_item.currentStock * updated_item.unitPrice
-        item_dict["isLowStock"] = updated_item.currentStock <= updated_item.minimumStock
+        item_dict = inventory_response_data(updated_item)
         
         return InventoryItemResponse.model_validate(item_dict)
         

@@ -16,6 +16,10 @@ from app.routes.notifications import create_restaurant_event_notifications
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
+def prisma_payload(model) -> dict:
+    return model.model_dump() if hasattr(model, "model_dump") else model.__dict__.copy()
+
+
 # ==================== PUBLIC ORDER ENDPOINTS (No Auth Required) ====================
 
 @router.post("/public", response_model=OrderResponse)
@@ -174,13 +178,7 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
                 "items": {"include": {"dish": True}},
                 "table": True,
                 "restaurant": True,
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True
-                    }
-                }
+                "user": True
             }
         )
 
@@ -198,7 +196,7 @@ async def create_public_order(order_data: PublicOrderCreate, db: "Prisma" = Depe
             },
         )
         
-        return OrderResponse.model_validate(complete_order)
+        return OrderResponse.model_validate(prisma_payload(complete_order))
         
     except Exception as e:
         raise HTTPException(
@@ -357,14 +355,7 @@ async def create_order(
                 "table": True,
                 "restaurant": True,
                 "deliveryAddress": True,  # Include delivery address details
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True  # Include email for contact
-                    }
-                }
+                "user": True
                     }
         )
 
@@ -383,7 +374,7 @@ async def create_order(
             },
         )
         
-        return OrderResponse.model_validate(complete_order)
+        return OrderResponse.model_validate(prisma_payload(complete_order))
         
     except Exception as e:
         raise HTTPException(
@@ -534,13 +525,7 @@ async def get_order(
             "items": {"include": {"dish": True}},
             "table": True,
             "restaurant": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True
         }
     )
     
@@ -569,7 +554,7 @@ async def get_order(
                 detail="You can only view your own orders"
             )
     
-    return OrderResponse.model_validate(order)
+    return OrderResponse.model_validate(prisma_payload(order))
 
 
 @router.get("/public/status/{order_number}", response_model=OrderResponse)
@@ -584,9 +569,9 @@ async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_
     order = await db.order.find_unique(
         where={"orderNumber": order_number},
         include={
-            "items": {"include": {"dish": {"select": {"name": True, "price": True}}}},
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
+            "items": {"include": {"dish": True}},
+            "table": True,
+            "restaurant": True
         }
     )
     
@@ -604,7 +589,7 @@ async def get_public_order_status(order_number: str, db: "Prisma" = Depends(get_
             detail="Order not found"
         )
     
-    return OrderResponse.model_validate(order)
+    return OrderResponse.model_validate(prisma_payload(order))
 
 
 # ==================== STAFF ORDER MANAGEMENT ====================
@@ -635,15 +620,9 @@ async def get_restaurant_orders(
         where=where_clause,
         include={
             "table": True,
-            "restaurant": {"select": {"name": True}},
+            "restaurant": True,
             "items": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True
         },
         skip=skip,
         take=limit,
@@ -733,17 +712,11 @@ async def update_order_status(
                 "items": {"include": {"dish": True}},
                 "table": True,
                 "restaurant": True,
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True
-                    }
-                }
+                "user": True
             }
         )
         
-        return OrderResponse.model_validate(updated_order)
+        return OrderResponse.model_validate(prisma_payload(updated_order))
         
     except Exception as e:
         raise HTTPException(
@@ -783,15 +756,9 @@ async def get_table_current_orders(
         },
         include={
             "table": True,
-            "restaurant": {"select": {"name": True}},
+            "restaurant": True,
             "items": True,
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True
         },
         order={"orderTime": "desc"}
     )

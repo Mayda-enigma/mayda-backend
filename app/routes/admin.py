@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from prisma import Json
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_admin_user
@@ -39,6 +40,14 @@ def build_default_platform_settings() -> Dict[str, Any]:
     }
 
 
+def wrap_settings_json(data: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(data.get("defaultOperatingHours"), dict):
+        data["defaultOperatingHours"] = Json(data["defaultOperatingHours"])
+    if isinstance(data.get("featureFlags"), dict):
+        data["featureFlags"] = Json(data["featureFlags"])
+    return data
+
+
 def get_window_start(range_value: AnalyticsRange, window_end: datetime) -> datetime:
     if range_value == AnalyticsRange.WEEK:
         return window_end - timedelta(days=7)
@@ -56,7 +65,7 @@ async def get_or_create_platform_settings(db: "Prisma"):
         return existing_rows[0]
 
     try:
-        return await db.platformsettings.create(data=build_default_platform_settings())
+        return await db.platformsettings.create(data=wrap_settings_json(build_default_platform_settings()))
     except Exception as exc:
         existing_rows = await db.platformsettings.find_many(
             take=1,
@@ -147,17 +156,17 @@ async def get_admin_stats(
     )
 
     recent_orders = await db.order.find_many(
-        include={"restaurant": {"select": {"name": True}}},
+        include={"restaurant": True},
         order={"orderTime": "desc"},
         take=5,
     )
     recent_reservations = await db.reservation.find_many(
-        include={"restaurant": {"select": {"name": True}}},
+        include={"restaurant": True},
         order={"createdAt": "desc"},
         take=3,
     )
     recent_reviews = await db.review.find_many(
-        include={"restaurant": {"select": {"name": True}}},
+        include={"restaurant": True},
         order={"createdAt": "desc"},
         take=3,
     )
@@ -193,7 +202,7 @@ async def get_admin_analytics(
                 "lte": window_end,
             }
         },
-        include={"restaurant": {"select": {"name": True}}},
+        include={"restaurant": True},
     )
     total_restaurants = await db.restaurant.count()
     total_reservations = await db.reservation.count(
@@ -308,7 +317,7 @@ async def update_platform_settings(
     try:
         updated_settings = await db.platformsettings.update(
             where={"id": settings_row.id},
-            data=update_data,
+            data=wrap_settings_json(update_data),
         )
         return PlatformSettingsResponse.model_validate(updated_settings)
     except Exception as exc:

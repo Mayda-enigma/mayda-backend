@@ -64,12 +64,7 @@ async def get_restaurant_orders_for_range(db: "Prisma", restaurant_id: int, time
         include={
             "items": {
                 "include": {
-                    "dish": {
-                        "select": {
-                            "id": True,
-                            "name": True,
-                        }
-                    }
+                    "dish": True
                 }
             }
         },

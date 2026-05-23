@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from prisma import Json
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_user
@@ -35,11 +36,11 @@ async def create_restaurant_event_notifications(
         for recipient in recipients:
             await db.notification.create(
                 data={
-                    "userId": recipient.id,
+                    "user": {"connect": {"id": recipient.id}},
                     "type": notification_type,
                     "title": title,
                     "body": body,
-                    "metadata": metadata,
+                    "metadata": Json(metadata) if metadata is not None else None,
                 }
             )
     except Exception as exc:

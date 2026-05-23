@@ -363,14 +363,21 @@ model Inventory {
   restaurantId Int
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
   itemName     String
+  name         String?
   description  String?
+  category     String?
   unit         String     
   currentStock Float
   minStock     Float      
+  minimumStock Float?
   maxStock     Float?     
   unitCost     Float?     
+  unitPrice    Float?
   supplier     String?
   supplierContact String?
+  location     String?
+  expiryDate   DateTime?
+  isActive     Boolean    @default(true)
   lastRestocked DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -381,11 +388,24 @@ model Inventory {
 
 model ingredient {
   id Int @id @default(autoincrement())
-  dishId Int
-  dish Dish @relation(fields: [dishId] , references: [id])
-  InventoryId Int
-  Inventoryrel Inventory @relation(fields: [InventoryId] , references: [id])
-  quantity Float
+  name String?
+  description String?
+  allergenInfo String?
+  category String?
+  isVegetarian Boolean @default(false)
+  isVegan Boolean @default(false)
+  isGlutenFree Boolean @default(false)
+  isDairyFree Boolean @default(false)
+  nutritionalInfo Json?
+  isActive Boolean @default(true)
+  dishId Int?
+  dish Dish? @relation(fields: [dishId] , references: [id])
+  InventoryId Int?
+  Inventoryrel Inventory? @relation(fields: [InventoryId] , references: [id])
+  quantity Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("ingredient")
 }
 
 

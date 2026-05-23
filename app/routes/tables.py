@@ -325,14 +325,7 @@ async def check_in_table(
 
     active_session = await db.tablesession.find_first(
         where={"tableId": table_id, "isActive": True},
-        include={
-            "waiter": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                }
-            }
-        }
+        include={"waiter": True}
     )
 
     if table.status == TableStatus.OCCUPIED.value or active_session:
@@ -343,7 +336,7 @@ async def check_in_table(
                 "message": "Table is already occupied",
                 "tableId": table.id,
                 "status": table.status,
-                "currentOccupant": occupant_info.model_dump() if occupant_info else None,
+                "currentOccupant": occupant_info.model_dump(mode="json") if occupant_info else None,
             }
         )
 
@@ -399,13 +392,7 @@ async def get_table_current_orders(
             "items": {
                 "include": {"dish": True}
             },
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            }
+            "user": True
         },
         order={"orderTime": "desc"}
     )
@@ -444,11 +431,6 @@ async def get_tables_availability(
             "orders": {
                 "where": {
                     "status": {"in": ["PENDING", "CONFIRMED", "PREPARING", "READY"]}
-                },
-                "select": {
-                    "id": True,
-                    "status": True,
-                    "orderTime": True
                 }
             }
         },

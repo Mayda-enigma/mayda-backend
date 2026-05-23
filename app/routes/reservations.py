@@ -16,6 +16,10 @@ from app.routes.notifications import create_restaurant_event_notifications
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
 
 
+def prisma_payload(model) -> dict:
+    return model.model_dump() if hasattr(model, "model_dump") else model.__dict__.copy()
+
+
 # ==================== PUBLIC RESERVATION ENDPOINTS ====================
 
 @router.post("/availability", response_model=ReservationAvailabilityResponse)
@@ -167,7 +171,7 @@ async def create_public_reservation(
             reservationStart=reservation_data.reservationStart,
             reservationEnd=reservation_data.reservationEnd
         )
-        availability = await check_availability(availability_request)
+        availability = await check_availability(availability_request, db=db)
         
         if not availability.available or not any(t.id == reservation_data.tableId for t in availability.availableTables):
             raise HTTPException(
@@ -211,22 +215,9 @@ async def create_public_reservation(
         complete_reservation = await db.reservation.find_unique(
             where={"id": reservation.id},
             include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
+                "user": True,
                 "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
+                "restaurant": True
             }
         )
 
@@ -245,7 +236,7 @@ async def create_public_reservation(
             },
         )
         
-        return ReservationResponse.model_validate(complete_reservation)
+        return ReservationResponse.model_validate(prisma_payload(complete_reservation))
         
     except Exception as e:
         raise HTTPException(
@@ -310,7 +301,7 @@ async def create_reservation(
             reservationStart=reservation_data.reservationStart,
             reservationEnd=reservation_data.reservationEnd
         )
-        availability = await check_availability(availability_request)
+        availability = await check_availability(availability_request, db=db)
         
         if not availability.available or not any(t.id == reservation_data.tableId for t in availability.availableTables):
             raise HTTPException(
@@ -334,22 +325,9 @@ async def create_reservation(
         complete_reservation = await db.reservation.find_unique(
             where={"id": reservation.id},
             include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
+                "user": True,
                 "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
+                "restaurant": True
             }
         )
 
@@ -369,7 +347,7 @@ async def create_reservation(
             },
         )
         
-        return ReservationResponse.model_validate(complete_reservation)
+        return ReservationResponse.model_validate(prisma_payload(complete_reservation))
         
     except Exception as e:
         raise HTTPException(
@@ -395,15 +373,9 @@ async def get_my_reservations(
     reservations = await db.reservation.find_many(
         where=where_clause,
         include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            },
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
+            "user": True,
+            "table": True,
+            "restaurant": True
         },
         skip=skip,
         take=limit,
@@ -434,22 +406,9 @@ async def get_reservation(
     reservation = await db.reservation.find_unique(
         where={"id": reservation_id},
         include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True,
-                    "email": True
-                }
-            },
+            "user": True,
             "table": True,
-            "restaurant": {
-                "select": {
-                    "name": True,
-                    "phone": True,
-                    "email": True
-                }
-            }
+            "restaurant": True
         }
     )
     
@@ -479,7 +438,7 @@ async def get_reservation(
                     detail="You can only view your own reservations"
                 )
     
-    return ReservationResponse.model_validate(reservation)
+    return ReservationResponse.model_validate(prisma_payload(reservation))
 
 
 # ==================== STAFF RESERVATION MANAGEMENT ====================
@@ -526,15 +485,9 @@ async def get_restaurant_reservations(
     reservations = await db.reservation.find_many(
         where=where_clause,
         include={
-            "user": {
-                "select": {
-                    "firstName": True,
-                    "lastName": True,
-                    "phone": True
-                }
-            },
-            "table": {"select": {"number": True}},
-            "restaurant": {"select": {"name": True}}
+            "user": True,
+            "table": True,
+            "restaurant": True
         },
         skip=skip,
         take=limit,
@@ -586,26 +539,13 @@ async def update_reservation_status(
                 "updatedAt": datetime.now()
             },
             include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
+                "user": True,
                 "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
+                "restaurant": True
             }
         )
         
-        return ReservationResponse.model_validate(updated_reservation)
+        return ReservationResponse.model_validate(prisma_payload(updated_reservation))
         
     except Exception as e:
         raise HTTPException(
@@ -685,26 +625,13 @@ async def update_reservation(
             where={"id": reservation_id},
             data=update_data,
             include={
-                "user": {
-                    "select": {
-                        "firstName": True,
-                        "lastName": True,
-                        "phone": True,
-                        "email": True
-                    }
-                },
+                "user": True,
                 "table": True,
-                "restaurant": {
-                    "select": {
-                        "name": True,
-                        "phone": True,
-                        "email": True
-                    }
-                }
+                "restaurant": True
             }
         )
         
-        return ReservationResponse.model_validate(updated_reservation)
+        return ReservationResponse.model_validate(prisma_payload(updated_reservation))
         
     except Exception as e:
         raise HTTPException(

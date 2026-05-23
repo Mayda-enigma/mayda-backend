@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+from prisma import Json
 from typing import List, Optional
 from app.models.ingredient import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
@@ -13,6 +14,19 @@ from app.middleware.roles import (
 
 
 router = APIRouter(prefix="/ingredients", tags=["Ingredients Management"])
+
+
+def ingredient_response_data(ingredient) -> dict:
+    ingredient_dict = ingredient.model_dump() if hasattr(ingredient, "model_dump") else ingredient.__dict__.copy()
+    ingredient_dict["name"] = ingredient_dict.get("name") or f"Ingredient {ingredient.id}"
+    ingredient_dict["category"] = ingredient_dict.get("category") or "Uncategorized"
+    ingredient_dict["isVegetarian"] = ingredient_dict.get("isVegetarian", False)
+    ingredient_dict["isVegan"] = ingredient_dict.get("isVegan", False)
+    ingredient_dict["isGlutenFree"] = ingredient_dict.get("isGlutenFree", False)
+    ingredient_dict["isDairyFree"] = ingredient_dict.get("isDairyFree", False)
+    ingredient_dict["isActive"] = ingredient_dict.get("isActive", True)
+    ingredient_dict["dishCount"] = 1 if ingredient_dict.get("dishId") else 0
+    return ingredient_dict
 
 
 # ==================== INGREDIENTS CRUD ====================
@@ -58,13 +72,11 @@ async def create_ingredient(
                 "isVegan": ingredient_data.isVegan,
                 "isGlutenFree": ingredient_data.isGlutenFree,
                 "isDairyFree": ingredient_data.isDairyFree,
-                "nutritionalInfo": ingredient_data.nutritionalInfo
+                "nutritionalInfo": Json(ingredient_data.nutritionalInfo) if ingredient_data.nutritionalInfo is not None else None
             }
         )
         
-        # Format response
-        ingredient_dict = ingredient.__dict__.copy()
-        ingredient_dict["dishCount"] = 0  # New ingredient has no dishes yet
+        ingredient_dict = ingredient_response_data(ingredient)
         
         return IngredientResponse.model_validate(ingredient_dict)
         
@@ -123,23 +135,9 @@ async def get_ingredients(
             order={"name": "asc"}
         )
         
-        # Get dish count for each ingredient
         result = []
         for ingredient in ingredients:
-            # Count dishes using this ingredient
-            dish_count = await db.dish.count(
-                where={
-                    "ingredients": {
-                        "some": {
-                            "ingredientId": ingredient.id
-                        }
-                    }
-                }
-            )
-            
-            ingredient_dict = ingredient.__dict__.copy()
-            ingredient_dict["dishCount"] = dish_count
-            
+            ingredient_dict = ingredient_response_data(ingredient)
             result.append(IngredientResponse.model_validate(ingredient_dict))
         
         return result
@@ -170,19 +168,7 @@ async def get_ingredient(
             detail="Ingredient not found"
         )
     
-    # Count dishes using this ingredient
-    dish_count = await db.dish.count(
-        where={
-            "ingredients": {
-                "some": {
-                    "ingredientId": ingredient_id
-                }
-            }
-        }
-    )
-    
-    ingredient_dict = ingredient.__dict__.copy()
-    ingredient_dict["dishCount"] = dish_count
+    ingredient_dict = ingredient_response_data(ingredient)
     
     return IngredientResponse.model_validate(ingredient_dict)
 
@@ -218,7 +204,7 @@ async def update_ingredient(
     update_data = {}
     for field, value in ingredient_data.model_dump(exclude_unset=True).items():
         if value is not None:
-            update_data[field] = value
+            update_data[field] = Json(value) if field == "nutritionalInfo" else value
     
     if not update_data:
         raise HTTPException(
@@ -249,19 +235,7 @@ async def update_ingredient(
             data=update_data
         )
         
-        # Count dishes using this ingredient
-        dish_count = await db.dish.count(
-            where={
-                "ingredients": {
-                    "some": {
-                        "ingredientId": ingredient_id
-                    }
-                }
-            }
-        )
-        
-        ingredient_dict = updated_ingredient.__dict__.copy()
-        ingredient_dict["dishCount"] = dish_count
+        ingredient_dict = ingredient_response_data(updated_ingredient)
         
         return IngredientResponse.model_validate(ingredient_dict)
         
