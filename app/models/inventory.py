@@ -37,7 +37,7 @@ class InventoryItemResponse(BaseModel):
     restaurant: dict | None = None
     name: str
     description: str | None = None
-    category: str
+    category: str | None = None
     unit: str
     currentStock: float
     minimumStock: float
