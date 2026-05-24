@@ -1,6 +1,6 @@
 """Initial database schema.
 
-Revision ID: 001
+Revision ID: fb6a4e84bc72
 Revises:
 Create Date: 2026-05-23
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "001"
+revision: str = "fb6a4e84bc72"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

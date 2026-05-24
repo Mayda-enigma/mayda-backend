@@ -125,7 +125,7 @@ async def transcribe(
 
     result = await proxy_multipart_to_service(
         base_url=settings.VOICE_SERVICE_URL,
-        path="/transcribe",
+        path="/api/transcribe",
         files=files,
         request=request,
     )
