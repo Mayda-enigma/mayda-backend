@@ -70,7 +70,6 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_se
     return UserResponse.model_validate(user)
 
 
-
 @router.post("/login", response_model=TokenResponse)
 async def login(user_data: UserLogin, db: AsyncSession = Depends(get_db_session)):
     user = None

@@ -34,9 +34,7 @@ async def get_profile(
         )
 
     # Fallback: get admin user from DB
-    result = await db.execute(
-        select(User).where(User.role == "ADMIN").limit(1)
-    )
+    result = await db.execute(select(User).where(User.role == "ADMIN").limit(1))
     admin = result.scalar_one_or_none()
     if admin:
         name = f"{admin.firstName} {admin.lastName}"

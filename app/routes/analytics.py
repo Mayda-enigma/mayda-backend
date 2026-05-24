@@ -125,12 +125,15 @@ async def get_admin_revenue(
     from sqlalchemy import select as sa_select
 
     from app.models.sqlalchemy_models import Order
+
     orders = (
-        (await db.execute(
-            sa_select(Order)
-            .where(Order.orderTime >= thirty_days_ago, Order.status != "CANCELLED")
-            .order_by(Order.orderTime.asc())
-        ))
+        (
+            await db.execute(
+                sa_select(Order)
+                .where(Order.orderTime >= thirty_days_ago, Order.status != "CANCELLED")
+                .order_by(Order.orderTime.asc())
+            )
+        )
         .scalars()
         .all()
     )
@@ -164,12 +167,9 @@ async def get_admin_channels(
     from collections import defaultdict
 
     from app.models.sqlalchemy_models import Order
+
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    orders = (
-        (await db.execute(select(Order).where(Order.orderTime >= today_start)))
-        .scalars()
-        .all()
-    )
+    orders = (await db.execute(select(Order).where(Order.orderTime >= today_start))).scalars().all()
 
     counts: dict[str, int] = defaultdict(int)
     for order in orders:
@@ -196,12 +196,9 @@ async def get_admin_peak_hours(
     from collections import defaultdict
 
     from app.models.sqlalchemy_models import Order
+
     last_7_days = datetime.now() - timedelta(days=7)
-    orders = (
-        (await db.execute(select(Order).where(Order.orderTime >= last_7_days)))
-        .scalars()
-        .all()
-    )
+    orders = (await db.execute(select(Order).where(Order.orderTime >= last_7_days))).scalars().all()
 
     hourly: dict[int, int] = defaultdict(int)
     for order in orders:

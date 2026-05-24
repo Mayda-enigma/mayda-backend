@@ -62,15 +62,7 @@ async def get_order_channels(
     db: AsyncSession = Depends(get_db_session),
 ):
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    orders = (
-        (
-            await db.execute(
-                select(Order).where(Order.orderTime >= today_start)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    orders = (await db.execute(select(Order).where(Order.orderTime >= today_start))).scalars().all()
 
     counts: dict[str, int] = defaultdict(int)
     for order in orders:
@@ -83,8 +75,7 @@ async def get_order_channels(
     }
 
     return [
-        ChannelData(channel=channel_labels.get(k, k), count=v)
-        for k, v in sorted(counts.items(), key=lambda x: -x[1])
+        ChannelData(channel=channel_labels.get(k, k), count=v) for k, v in sorted(counts.items(), key=lambda x: -x[1])
     ]
 
 
@@ -94,25 +85,14 @@ async def get_peak_hours(
     db: AsyncSession = Depends(get_db_session),
 ):
     last_7_days = datetime.now() - timedelta(days=7)
-    orders = (
-        (
-            await db.execute(
-                select(Order).where(Order.orderTime >= last_7_days)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    orders = (await db.execute(select(Order).where(Order.orderTime >= last_7_days))).scalars().all()
 
     hourly: dict[int, int] = defaultdict(int)
     for order in orders:
         hour = order.orderTime.hour
         hourly[hour] += 1
 
-    return [
-        PeakHour(hour=h, order_count=hourly.get(h, 0))
-        for h in range(24)
-    ]
+    return [PeakHour(hour=h, order_count=hourly.get(h, 0)) for h in range(24)]
 
 
 @router.get("/top-restaurants")
@@ -130,13 +110,7 @@ async def get_top_restaurants(
 
     rids = [rid for rid, _ in sorted_ids]
     restaurants = (
-        (
-            await db.execute(
-                select(Restaurant)
-                .options(selectinload(Restaurant.address))
-                .where(Restaurant.id.in_(rids))
-            )
-        )
+        (await db.execute(select(Restaurant).options(selectinload(Restaurant.address)).where(Restaurant.id.in_(rids))))
         .scalars()
         .all()
     )
@@ -166,10 +140,7 @@ async def get_recent_activity(
     recent_orders = (
         (
             await db.execute(
-                select(Order)
-                .options(selectinload(Order.restaurant))
-                .order_by(Order.orderTime.desc())
-                .limit(5)
+                select(Order).options(selectinload(Order.restaurant)).order_by(Order.orderTime.desc()).limit(5)
             )
         )
         .scalars()

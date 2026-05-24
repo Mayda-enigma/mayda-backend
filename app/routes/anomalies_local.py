@@ -27,13 +27,7 @@ async def get_anomalies(
 
     # Detect anomalies from order data
     three_days_ago = datetime.now() - timedelta(days=3)
-    recent_orders = (
-        (await db.execute(
-            select(Order).where(Order.orderTime >= three_days_ago)
-        ))
-        .scalars()
-        .all()
-    )
+    recent_orders = (await db.execute(select(Order).where(Order.orderTime >= three_days_ago))).scalars().all()
 
     if recent_orders:
         restaurant_revenue: dict[int, float] = {}
@@ -88,16 +82,11 @@ async def get_anomaly_stats(
     for a in anomalies:
         severity_counts[a.severity] = severity_counts.get(a.severity, 0) + 1
 
-    by_severity = [
-        {"severity": s, "count": c}
-        for s, c in sorted(severity_counts.items(), key=lambda x: -x[1])
-    ]
+    by_severity = [{"severity": s, "count": c} for s, c in sorted(severity_counts.items(), key=lambda x: -x[1])]
 
     return AnomalyStats(
         total=len(anomalies),
-        critical_unacknowledged=sum(
-            1 for a in anomalies if a.severity == "critical" and not a.acknowledged
-        ),
+        critical_unacknowledged=sum(1 for a in anomalies if a.severity == "critical" and not a.acknowledged),
         unacknowledged=sum(1 for a in anomalies if not a.acknowledged),
         by_severity=by_severity,
     )
