@@ -676,6 +676,62 @@ async def get_public_order_status(order_number: str, db: AsyncSession = Depends(
     return OrderResponse.model_validate(_order_to_response_dict(order))
 
 
+@router.get("/public/table/{table_id}", response_model=list[OrderListResponse])
+async def get_public_table_orders(
+    table_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Get orders for a table (Public endpoint for QR code customers).
+
+    Returns all orders placed at this table today so customers can
+    track what they ordered during their visit.
+    """
+
+    result = await db.execute(select(Table).where(Table.id == table_id))
+    table = result.scalar_one_or_none()
+    if not table or not table.isActive:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found or inactive")
+
+    result = await db.execute(
+        select(Order)
+        .where(
+            and_(
+                Order.tableId == table_id,
+                Order.userId.is_(None),
+                Order.status.in_(["PENDING", "CONFIRMED", "PREPARING", "READY", "COMPLETED"]),
+            )
+        )
+        .options(
+            selectinload(Order.table),
+            selectinload(Order.restaurant),
+            selectinload(Order.items),
+            selectinload(Order.user),
+        )
+        .order_by(Order.orderTime.desc())
+    )
+    orders = result.scalars().all()
+
+    order_list = []
+    for order in orders:
+        order_dict = {c.name: getattr(order, c.name) for c in order.__table__.columns}
+        order_dict["itemCount"] = len(order.items)
+        order_dict["user"] = None
+
+        if order.table:
+            order_dict["table"] = {
+                "id": order.table.id,
+                "number": order.table.number,
+                "capacity": order.table.capacity,
+            }
+        else:
+            order_dict["table"] = None
+
+        order_list.append(OrderListResponse.model_validate(order_dict))
+
+    return order_list
+
+
 # ==================== STAFF ORDER MANAGEMENT ====================
 
 
