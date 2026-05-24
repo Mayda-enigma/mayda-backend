@@ -1,139 +1,89 @@
-# Mayda Backend — Restaurant Management API
+# mayda-backend
 
-FastAPI + SQLAlchemy + PostgreSQL backend for the Mayda restaurant management platform.
+> REST API for the Mayda restaurant platform — powering menus, orders, inventory, reviews, and loyalty.
+
+## Overview
+
+`mayda-backend` is a FastAPI-based REST API that serves as the backbone of the Mayda ecosystem. It manages multi-restaurant operations including menu browsing, order processing, user authentication, inventory tracking, customer reviews, and loyalty programs. PostgreSQL with Alembic migrations ensures data consistency across deployments.
 
 ## Tech Stack
 
-- **Framework:** FastAPI (Python 3.10+)
-- **Database:** PostgreSQL 15 with SQLAlchemy
-- **Auth:** JWT (python-jose) + 2FA SMS (Twilio)
-- **Validation:** Pydantic v2
-- **Payments:** Guidini Pay
-- **Infrastructure:** Docker Compose, Nginx
-
-## Quick Start (Local)
-
-```bash
-# Clone
-git clone https://github.com/Mayda-enigma/mayda-backend.git
-cd mayda-backend
-
-# Python env
-python -m venv venv
-source venv/bin/activate
-
-# Dependencies
-pip install -r requirements.txt
-
-# Apply database migrations
-alembic upgrade head
-
-# Run
-uvicorn main:app --reload --port 8001
-```
-
-## Quick Start (Docker)
-
-```bash
-cp .env.example .env
-docker compose up -d
-```
-
-The API is at `http://localhost:8001/docs` (Swagger UI).
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `SECRET_KEY` | Yes | — | JWT signing secret |
-| `ALGORITHM` | No | `HS256` | JWT algorithm |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `30` | Access token TTL |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | No | `7` | Refresh token TTL |
-| `TWILIO_ACCOUNT_SID` | For 2FA | — | Twilio account SID |
-| `TWILIO_AUTH_TOKEN` | For 2FA | — | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | For 2FA | — | SMS sender number |
-| `GUIDINI_APP_KEY` | For payments | — | Guidini Pay app key |
-| `GUIDINI_API_KEY` | For payments | — | Guidini Pay API key |
-| `ENVIRONMENT` | No | `development` | `development` / `production` |
-
-Copy `.env.example` to `.env` and fill in the values.
-
-## Database
-
-```bash
-# Create a new migration
-alembic revision --autogenerate -m "<name>"
-
-# Apply migrations in production
-alembic upgrade head
-```
-
-## First-time Setup
-
-After migrations are applied and the server is running, create the initial admin user with the CLI:
-
-```bash
-python -m app.cli create-admin \
-  --email admin@mayda.dz \
-  --phone 1234567890 \
-  --password <secure-password>
-```
-
-Options:
-
-| Flag | Required | Default | Description |
-|---|---|---|---|
-| `--email` | Yes | — | Admin email address |
-| `--phone` | Yes | — | Admin phone number |
-| `--password` | Yes | — | Password (min 6 chars) |
-| `--first-name` | No | `Admin` | First name |
-| `--last-name` | No | `User` | Last name |
-
-The command refuses to run if a user with the same email or phone already exists.
-No admin is created automatically on startup — creation is always explicit.
-## Role-Based Access Control (RBAC)
-
-RBAC is enforced exclusively through **FastAPI `Depends` functions** declared in `app/middleware/roles.py`. Use these dependencies in route signatures — never implement role checks inline or via decorators.
-
-| Dependency | Allowed roles |
+| Layer | Technology |
 |---|---|
-| `get_current_user` | Any authenticated user |
-| `get_current_user_optional` | Any user (unauthenticated returns `None`) |
-| `get_current_staff_user` | `WAITER`, `CHEF`, `MANAGER`, `ADMIN` |
-| `get_current_manager_or_admin` | `MANAGER`, `ADMIN` |
-| `get_current_admin_user` | `ADMIN` only |
-
-Example:
-
-```python
-from app.middleware.roles import get_current_admin_user
-
-@router.delete("/{item_id}")
-async def delete_item(
-    item_id: int,
-    current_user=Depends(get_current_admin_user),
-    db=Depends(get_db_session),
-):
-    ...
-```
+| Framework | FastAPI (Python) |
+| ORM | SQLAlchemy 2.0 |
+| Migrations | Alembic |
+| Database | PostgreSQL 16 |
+| Auth | JWT-based |
+| Validation | Pydantic v2 |
+| Testing | pytest (107 tests) |
 
 ## Project Structure
 
 ```
+mayda-backend/
 ├── app/
-│   ├── core/           # Config, database, dependencies
-│   ├── models/         # Pydantic models / schemas
-│   ├── routes/         # API route handlers
-│   ├── auth/           # JWT & authentication logic
-│   └── services/       # Business logic
+│   ├── models/           # SQLAlchemy ORM models
+│   ├── routes/           # API endpoint routers
+│   ├── services/         # Business logic layer
+│   ├── schemas/          # Pydantic request/response schemas
+│   ├── auth/             # JWT authentication
+│   └── main.py           # FastAPI app entrypoint
 ├── alembic/
-│   ├── env.py         # Alembic config
-│   └── versions/      # Migration history
-├── alembic.ini         # Alembic config
-├── main.py             # FastAPI application entrypoint
-├── requirements.txt
+│   ├── versions/         # Database migrations
+│   └── env.py
+├── tests/                # pytest suite
 ├── Dockerfile
-├── docker-compose.yml
-└── .env.example
+└── requirements.txt
+```
+
+## API Modules
+
+| Module | Description |
+|---|---|
+| **Restaurants** | CRUD, search, multi-brand management |
+| **Menus** | Categories, menu items, modifiers |
+| **Orders** | Creation, status tracking, history |
+| **Users** | Registration, profiles, roles (customer/manager/admin) |
+| **Inventory** | Stock management, cost tracking, alerts |
+| **Reviews** | Ratings, feedback, moderation |
+| **Loyalty** | Points, rewards, transaction history |
+| **Orders** | Pricing, discounts, tax calculation |
+| **Ingredients** | Dish composition, dietary info |
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+
+# Start server
+uvicorn app.main:app --reload --port 8000
+
+# Run tests
+pytest
+```
+
+## API Documentation
+
+When running, interactive docs are available at:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## Database Migrations
+
+Migrations are managed with Alembic and auto-applied on container startup:
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# Apply pending migrations
+alembic upgrade head
+
+# Rollback one step
+alembic downgrade -1
 ```
