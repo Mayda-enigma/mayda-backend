@@ -74,9 +74,7 @@ async def get_restaurant_orders_for_range(db: AsyncSession, restaurant_id: int, 
                 Order.orderTime <= window_end,
             )
         )
-        .options(
-            selectinload(Order.items).selectinload(OrderItem.dish).selectinload(Dish.category)
-        )
+        .options(selectinload(Order.items).selectinload(OrderItem.dish).selectinload(Dish.category))
     )
     orders = result.scalars().all()
 
@@ -155,9 +153,7 @@ async def get_restaurant_analytics(
                 Order.orderTime < window_start,
             )
         )
-        .options(
-            selectinload(Order.items).selectinload(OrderItem.dish).selectinload(Dish.category)
-        )
+        .options(selectinload(Order.items).selectinload(OrderItem.dish).selectinload(Dish.category))
     )
     prev_orders = prev_result.scalars().all()
     prev_completed = [o for o in prev_orders if o.status != "CANCELLED"]
