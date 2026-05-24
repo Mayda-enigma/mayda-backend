@@ -33,6 +33,7 @@ from app.routes import (
     tables,
     users,
 )
+from app.routes import admin_dashboard, anomalies_local, profile
 from app.utils.logging import logger
 
 
@@ -131,6 +132,9 @@ app.include_router(inventory.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(admin_dashboard.router, prefix="/api")
+app.include_router(anomalies_local.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 

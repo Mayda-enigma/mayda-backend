@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.middleware.roles import get_current_staff_user, get_current_user
+from app.middleware.roles import get_current_staff_user, get_current_user, get_current_user_optional
+from app.models.admin_dashboard import ChannelData, PeakHour, RevenuePoint
 from app.models.analytics import (
     AlertItem,
     AnalyticsRange,
@@ -114,6 +115,96 @@ def compute_trend(current: float, previous: float) -> float:
     if previous == 0:
         return 0.0
     return round((current - previous) / previous * 100, 1)
+
+
+@router.get("/revenue")
+async def get_admin_revenue(
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    from sqlalchemy import select as sa_select
+    from app.models.sqlalchemy_models import Order
+    orders = (
+        (await db.execute(
+            sa_select(Order)
+            .where(Order.orderTime >= thirty_days_ago, Order.status != "CANCELLED")
+            .order_by(Order.orderTime.asc())
+        ))
+        .scalars()
+        .all()
+    )
+
+    daily: dict[str, float] = {}
+    for i in range(31):
+        date = (datetime.now() - timedelta(days=30 - i)).strftime("%Y-%m-%d")
+        daily[date] = 0.0
+
+    for order in orders:
+        date = order.orderTime.strftime("%Y-%m-%d") if hasattr(order.orderTime, "strftime") else str(order.orderTime)[:10]
+        if date in daily:
+            daily[date] += order.totalAmount
+
+    points = [{"date": d, "value": round(a, 2)} for d, a in daily.items()]
+    total = round(sum(p["value"] for p in points), 2)
+    return {
+        "total": total,
+        "currency": "DZD",
+        "period": "Last 30 days",
+        "points": points,
+    }
+
+
+@router.get("/channels")
+async def get_admin_channels(
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    from collections import defaultdict
+    from app.models.sqlalchemy_models import Order
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    orders = (
+        (await db.execute(select(Order).where(Order.orderTime >= today_start)))
+        .scalars()
+        .all()
+    )
+
+    counts: dict[str, int] = defaultdict(int)
+    for order in orders:
+        counts[order.type.value] += 1
+
+    channel_labels = {
+        "DINE_IN": "Sur place",
+        "TAKEAWAY": "À emporter",
+        "DELIVERY": "Livraison",
+    }
+
+    total_orders = sum(counts.values()) or 1
+    return [
+        {"name": channel_labels.get(k, k), "value": v, "share": round(v / total_orders * 100, 1)}
+        for k, v in sorted(counts.items(), key=lambda x: -x[1])
+    ]
+
+
+@router.get("/peak-hours")
+async def get_admin_peak_hours(
+    current_user=Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db_session),
+):
+    from collections import defaultdict
+    from app.models.sqlalchemy_models import Order
+    last_7_days = datetime.now() - timedelta(days=7)
+    orders = (
+        (await db.execute(select(Order).where(Order.orderTime >= last_7_days)))
+        .scalars()
+        .all()
+    )
+
+    hourly: dict[int, int] = defaultdict(int)
+    for order in orders:
+        hourly[order.orderTime.hour] += 1
+
+    return [{"hour": h, "value": hourly.get(h, 0)} for h in range(24)]
 
 
 @router.get("/restaurant")
