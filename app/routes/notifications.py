@@ -31,6 +31,7 @@ async def create_restaurant_event_notifications(
                     or_(
                         User.role == "ADMIN",
                         and_(User.role == "MANAGER", User.restaurantId == restaurant_id),
+                        and_(User.role == "WAITER", User.restaurantId == restaurant_id),
                     ),
                 )
             )

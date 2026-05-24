@@ -27,9 +27,11 @@ from app.models.sqlalchemy_models import (
     Restaurant,
     Review,
     Table,
+    TableSession,
     User,
     UserRole,
 )
+from app.models.table import TableStatus
 
 
 async def find_or_create_user(db: AsyncSession, email: str, data: dict):
@@ -922,7 +924,32 @@ async def main():
 
         print(f"✅ Created {len(orders)} orders with order items (seeded across day/week/month)")
 
-        # 12. Create Reviews
+        # 12. Create active TableSessions for the first few tables of each restaurant
+        sessions_created = 0
+        for restaurant in restaurants:
+            restaurant_tables = [t for t in all_tables if t.restaurantId == restaurant.id and t.isActive]
+            # Get the first waiter for this restaurant
+            restaurant_waiters = [u for u in users if u.restaurantId == restaurant.id and u.role == UserRole.WAITER]
+            if not restaurant_waiters or len(restaurant_tables) < 2:
+                continue
+            # Create 1-2 active sessions
+            for i in range(min(2, len(restaurant_tables))):
+                session_table = restaurant_tables[i]
+                waiter = restaurant_waiters[i % len(restaurant_waiters)]
+                started_at = now - timedelta(hours=random.randint(1, 3))
+                session = TableSession(
+                    tableId=session_table.id,
+                    waiterId=waiter.id,
+                    startedAt=started_at,
+                    isActive=True,
+                )
+                db.add(session)
+                session_table.status = TableStatus.OCCUPIED.value
+                sessions_created += 1
+        await db.commit()
+        print(f"✅ Created {sessions_created} active table sessions")
+
+        # 13. Create Reviews
         reviews = []
         completed_orders = [o for o in orders if o.status == OrderStatus.COMPLETED]
 

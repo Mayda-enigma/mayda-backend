@@ -57,10 +57,53 @@ async def get_restaurant_tables(
         where_conditions.append(Table.isActive == True)
 
     tables = (
-        (await db.execute(select(Table).where(and_(*where_conditions)).order_by(Table.number.asc()))).scalars().all()
+        (
+            await db.execute(
+                select(Table)
+                .where(and_(*where_conditions))
+                .options(selectinload(Table.sessions).selectinload(TableSession.waiter))
+                .order_by(Table.number.asc())
+            )
+        )
+        .scalars()
+        .all()
     )
 
-    return [TableListResponse.model_validate(table) for table in tables]
+    active_statuses = ["PENDING", "CONFIRMED", "PREPARING", "READY"]
+    if tables:
+        count_result = (
+            await db.execute(
+                select(Order.tableId, func.count(Order.id))
+                .where(
+                    and_(
+                        Order.tableId.in_([t.id for t in tables]),
+                        Order.status.in_(active_statuses),
+                    )
+                )
+                .group_by(Order.tableId)
+            )
+        ).all()
+        order_counts = {row[0]: row[1] for row in count_result}
+    else:
+        order_counts = {}
+
+    result = []
+    for table in tables:
+        active_session = next((s for s in (table.sessions or []) if s.isActive), None)
+        result.append(
+            TableListResponse(
+                id=table.id,
+                number=table.number,
+                capacity=table.capacity,
+                isActive=table.isActive,
+                status=table.status if isinstance(table.status, TableStatus) else TableStatus(table.status.value),
+                qrCode=table.qrCode,
+                currentSession=build_current_occupant_info(active_session) if active_session else None,
+                activeOrdersCount=order_counts.get(table.id, 0),
+            )
+        )
+
+    return result
 
 
 @router.get("/{table_id}", response_model=TableResponse)
@@ -394,6 +437,64 @@ async def get_table_current_orders(
         "current_orders": orders,
         "total_orders": len(orders),
     }
+
+
+@router.get("/qr/{qr_value}")
+async def lookup_table_by_qr(
+    qr_value: str,
+    current_user=Depends(get_current_staff_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Look up a table by its QR code value (Staff only)."""
+
+    result = await db.execute(select(Table).where(and_(Table.qrCode == qr_value, Table.isActive == True)))
+    table = result.scalar_one_or_none()
+
+    if not table:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active table found with this QR code",
+        )
+
+    if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Table not found in your restaurant",
+        )
+
+    return TableListResponse.model_validate(table)
+
+
+@router.post("/{table_id}/assistance")
+async def request_table_assistance(
+    table_id: int,
+    current_user=Depends(get_current_staff_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Request assistance for a table (Staff only). Creates a notification for managers."""
+
+    table = await db.get(Table, table_id)
+    if not table:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Table not found")
+
+    if current_user.role != "ADMIN" and current_user.restaurantId != table.restaurantId:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only request assistance for tables in your own restaurant",
+        )
+
+    from app.routes.notifications import create_restaurant_event_notifications
+
+    await create_restaurant_event_notifications(
+        db,
+        table.restaurantId,
+        "waiter_assistance",
+        f"Assistance needed at Table {table.number}",
+        f"{current_user.firstName} {current_user.lastName} requested assistance at Table {table.number}",
+        {"table_id": table.id, "table_number": table.number, "waiter_id": current_user.id},
+    )
+
+    return {"message": f"Assistance requested for Table {table.number}", "table_id": table.id}
 
 
 @router.get("/restaurant/{restaurant_id}/availability")

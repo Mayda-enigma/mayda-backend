@@ -54,6 +54,8 @@ class TableListResponse(BaseModel):
     isActive: bool
     status: TableStatus
     qrCode: str | None
+    currentSession: CurrentOccupantInfo | None = None
+    activeOrdersCount: int = 0
 
     class Config:
         from_attributes = True
