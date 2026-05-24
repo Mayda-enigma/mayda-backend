@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -113,8 +114,8 @@ class PlatformSettings(Base):
     id: int = Column(Integer, primary_key=True, default=1)
     currency: str = Column(String, nullable=False, server_default="USD")
     timezone: str = Column(String, nullable=False, server_default="UTC")
-    defaultOperatingHours = Column(JSON, nullable=False, server_default=func.cast("{}", JSON))
-    featureFlags = Column(JSON, nullable=False, server_default=func.cast("{}", JSON))
+    defaultOperatingHours = Column(JSON, nullable=False, server_default=text("'{}'::json"))
+    featureFlags = Column(JSON, nullable=False, server_default=text("'{}'::json"))
     updatedAt: datetime = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -485,7 +486,7 @@ class Order(Base):
         onupdate=func.now(),
         server_default=func.now(),
     )
-    paymentId: int | None = Column(Integer, ForeignKey("payments.id"), nullable=True)
+    paymentId: int | None = Column(Integer, ForeignKey("payments.id", use_alter=True), nullable=True)
 
     user = relationship("User", back_populates="orders", foreign_keys=[userId])
     restaurant = relationship("Restaurant", back_populates="orders")
