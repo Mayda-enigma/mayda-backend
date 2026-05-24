@@ -94,12 +94,12 @@ async def forecast(
     """Proxy POST /forecast to the inventory AI service."""
     result = await proxy_to_service(
         base_url=settings.INVENTORY_SERVICE_URL,
-        path="/forecast",
+        path="/api/forecast",
         method="POST",
         json=body.model_dump(exclude_none=True),
         request=request,
     )
-    return result
+    return {"forecast": result}
 
 
 @router.post(

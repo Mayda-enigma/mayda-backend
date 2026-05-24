@@ -45,6 +45,7 @@ services:
         condition: service_healthy
     networks:
       - restaurant_network
+      - mayda_ai_network
     volumes:
       - api_logs:/app/logs
 
@@ -57,3 +58,5 @@ volumes:
 networks:
   restaurant_network:
     driver: bridge
+  mayda_ai_network:
+    external: true
