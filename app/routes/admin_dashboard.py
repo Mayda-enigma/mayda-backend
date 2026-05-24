@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,7 @@ from app.models.admin_dashboard import (
     RevenuePoint,
     TopRestaurant,
 )
-from app.models.sqlalchemy_models import Address, Order, Restaurant
+from app.models.sqlalchemy_models import Order, Restaurant
 
 router = APIRouter(prefix="/admin/dashboard", tags=["Admin Dashboard"])
 
@@ -48,7 +48,8 @@ async def get_revenue_trend(
         daily[date] = 0.0
 
     for order in orders:
-        date = order.orderTime.strftime("%Y-%m-%d") if hasattr(order.orderTime, "strftime") else str(order.orderTime)[:10]
+        ot = order.orderTime
+        date = ot.strftime("%Y-%m-%d") if hasattr(ot, "strftime") else str(ot)[:10]
         if date in daily:
             daily[date] += order.totalAmount
 
@@ -180,7 +181,11 @@ async def get_recent_activity(
         items.append(
             ActivityItem(
                 label=f"Nouvelle commande #{order.orderNumber}",
-                meta=f"{order.restaurant.name} · {order.totalAmount} DZD" if order.restaurant else f"{order.totalAmount} DZD",
+                meta=(
+                    f"{order.restaurant.name} · {order.totalAmount} DZD"
+                    if order.restaurant
+                    else f"{order.totalAmount} DZD"
+                ),
                 created_at=order.orderTime.isoformat(),
             )
         )

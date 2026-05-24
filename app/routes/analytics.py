@@ -7,7 +7,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_staff_user, get_current_user, get_current_user_optional
-from app.models.admin_dashboard import ChannelData, PeakHour, RevenuePoint
 from app.models.analytics import (
     AlertItem,
     AnalyticsRange,
@@ -124,6 +123,7 @@ async def get_admin_revenue(
 ):
     thirty_days_ago = datetime.now() - timedelta(days=30)
     from sqlalchemy import select as sa_select
+
     from app.models.sqlalchemy_models import Order
     orders = (
         (await db.execute(
@@ -141,7 +141,8 @@ async def get_admin_revenue(
         daily[date] = 0.0
 
     for order in orders:
-        date = order.orderTime.strftime("%Y-%m-%d") if hasattr(order.orderTime, "strftime") else str(order.orderTime)[:10]
+        ot = order.orderTime
+        date = ot.strftime("%Y-%m-%d") if hasattr(ot, "strftime") else str(ot)[:10]
         if date in daily:
             daily[date] += order.totalAmount
 
@@ -161,6 +162,7 @@ async def get_admin_channels(
     db: AsyncSession = Depends(get_db_session),
 ):
     from collections import defaultdict
+
     from app.models.sqlalchemy_models import Order
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     orders = (
@@ -192,6 +194,7 @@ async def get_admin_peak_hours(
     db: AsyncSession = Depends(get_db_session),
 ):
     from collections import defaultdict
+
     from app.models.sqlalchemy_models import Order
     last_7_days = datetime.now() - timedelta(days=7)
     orders = (

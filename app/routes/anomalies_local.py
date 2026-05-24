@@ -1,7 +1,7 @@
 """Local anomalies endpoint — fallback when the AI proxy is unavailable."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
@@ -19,8 +19,9 @@ async def get_anomalies(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get stored anomalies. Falls back to local DB when AI proxy is down."""
-    from app.models.sqlalchemy_models import Order, Restaurant
     from datetime import datetime, timedelta
+
+    from app.models.sqlalchemy_models import Order, Restaurant
 
     anomalies: list[Anomaly] = []
 
@@ -49,7 +50,7 @@ async def get_anomalies(
                 Anomaly(
                     id=len(anomalies) + 1,
                     severity="high" if revenue > 500000 else "medium",
-                    title=f"Activité inhabituelle détectée",
+                    title="Activité inhabituelle détectée",
                     detail=f"{rname} : {revenue:.0f} DZD de commandes sur 3 jours",
                     detected_at=datetime.now().isoformat(),
                     acknowledged=False,

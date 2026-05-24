@@ -14,8 +14,10 @@ from app.middleware.request_logging import RequestLoggingMiddleware
 from app.models.sqlalchemy_models import User, UserRole
 from app.routes import (
     admin,
+    admin_dashboard,
     ai,
     analytics,
+    anomalies_local,
     auth,
     ingredients,
     inventory,
@@ -25,6 +27,7 @@ from app.routes import (
     orders,
     otp,
     payments,
+    profile,
     promotions,
     protected,
     reservations,
@@ -33,7 +36,6 @@ from app.routes import (
     tables,
     users,
 )
-from app.routes import admin_dashboard, anomalies_local, profile
 from app.utils.logging import logger
 
 
