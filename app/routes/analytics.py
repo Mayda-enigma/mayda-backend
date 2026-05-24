@@ -1,13 +1,14 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_staff_user, get_current_user
 from app.models.analytics import (
+    AlertItem,
     AnalyticsRange,
     CuisineShareItem,
     DailyRevenueItem,
@@ -18,13 +19,12 @@ from app.models.analytics import (
     KpisResponse,
     MonthlyComparisonItem,
     PerformanceMetricsResponse,
-    AlertItem,
     RestaurantAnalyticsResponse,
     RevenueResponse,
     TopDishFrontendItem,
     TopDishItem,
 )
-from app.models.sqlalchemy_models import Dish, MenuCategory, Order, OrderItem
+from app.models.sqlalchemy_models import Dish, Order, OrderItem
 from app.models.user import UserRole
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
