@@ -8,21 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.jwt import (
     create_access_token,
     create_refresh_token,
-    create_temp_token,
     get_password_hash,
     verify_password,
-    verify_temp_token,
     verify_token,
 )
 from app.core.config import settings
 from app.core.database import get_db_session
 from app.middleware.roles import get_current_admin_user, get_current_user
 from app.models.auth import (
-    OtpVerificationRequest,
     PasswordChange,
     RefreshTokenRequest,
-    StaffLogin,
-    TempTokenResponse,
     TokenResponse,
     UserLogin,
     UserRegister,
@@ -30,7 +25,6 @@ from app.models.auth import (
     UserUpdate,
 )
 from app.models.sqlalchemy_models import RefreshToken, User
-from app.utils.sms_service import SMSService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -74,79 +68,6 @@ async def register(user_data: UserRegister, db: AsyncSession = Depends(get_db_se
     await db.refresh(user)
 
     return UserResponse.model_validate(user)
-
-
-@router.post("/staff-login", response_model=TempTokenResponse)
-async def staff_login(user_data: StaffLogin, db: AsyncSession = Depends(get_db_session)):
-    result = await db.execute(select(User).where(User.phone == user_data.phone))
-    user = result.scalar_one_or_none()
-
-    if not user or not verify_password(user_data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect phone or password",
-        )
-
-    if not user.isActive:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is inactive")
-
-    if user.role not in ["WAITER", "CHEF", "MANAGER", "ADMIN"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access only")
-
-    sms_service = SMSService()
-    otp_result = await sms_service.send_otp(user.id, str(user.phone), "STAFF_AUTH")
-
-    if not otp_result.get("success", False):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send OTP",
-        )
-
-    temp_token = create_temp_token(user.id, "2fa")
-
-    return TempTokenResponse(
-        tempToken=temp_token,
-        message="OTP sent to your phone. Please verify to complete login.",
-        expiresIn=300,
-    )
-
-
-@router.post("/verify-otp", response_model=TokenResponse)
-async def verify_otp_and_login(otp_data: OtpVerificationRequest, db: AsyncSession = Depends(get_db_session)):
-    payload = verify_temp_token(otp_data.tempToken, "2fa")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired temporary token",
-        )
-
-    user_id = int(payload.get("sub"))
-
-    sms_service = SMSService()
-    otp_valid = await sms_service.verify_otp(user_id, otp_data.otpCode, "STAFF_AUTH")
-
-    if not otp_valid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP")
-
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
-
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    rt = RefreshToken(token=refresh_token, userId=user.id, expiresAt=expires_at)
-    db.add(rt)
-    await db.commit()
-    await db.refresh(rt)
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserResponse.model_validate(user),
-    )
 
 
 @router.post("/login", response_model=TokenResponse)
