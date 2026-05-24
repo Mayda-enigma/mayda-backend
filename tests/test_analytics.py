@@ -26,6 +26,7 @@ async def test_get_restaurant_analytics(client, staff_token, mock_staff_user):
         mock_db.execute.side_effect = [
             _mock_result(scalar_one_or_none_val=mock_staff_user),
             _mock_result(scalars_val=[order]),
+            _mock_result(scalars_val=[]),
         ]
 
         resp = await ac.get(
