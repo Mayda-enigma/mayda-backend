@@ -17,7 +17,7 @@ async def create_admin_user(
     """Create an admin user in the database. Returns False if user already exists."""
     await connect_db()
     try:
-        db = get_db()
+        db = await get_db()
 
         result = await db.execute(select(User).where(or_(User.email == email, User.phone == phone)))
         existing_user = result.scalar_one_or_none()

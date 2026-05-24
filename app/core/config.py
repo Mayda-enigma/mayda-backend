@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = []
-    BACKEND_CORS_ORIGIN_REGEX: str = r"https?://(localhost(:\d+)?|(.*\.)?mayda\.app|.*\.vercel\.app)"
+    BACKEND_CORS_ORIGIN_REGEX: str = r"https?://(localhost(:\d+)?|192\.168\.\d+\.\d+(:\d+)?|10\.\d+\.\d+\.\d+(:\d+)?|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?|(.*\.)?mayda\.app|.*\.vercel\.app)"
 
     # Environment
     ENVIRONMENT: str = "development"
